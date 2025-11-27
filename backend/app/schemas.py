@@ -107,8 +107,25 @@ class EncuestaCrear(EncuestaBase):
     reglas: List[ReglaAsignacionCrear] = []
     preguntas: List[PreguntaCrear] = []
 
+class UsuarioResumen(BaseModel):
+    id_admin: int
+    nombre_usuario: str
+    rol: RolAdmin
+
 class EncuestaSalida(EncuestaBase):
     id: int
+    
+    # === Campos de auditoría (solo lectura) ===
+    usuario_creacion: int
+    fecha_creacion: datetime
+    usuario_modificacion: Optional[int] = None
+    fecha_modificacion: Optional[datetime] = None
+    
+    # === Opcional: incluir datos del creador/modificador (mejor UX para frontend) ===
+    creador: Optional[UsuarioResumen] = None
+    modificador: Optional[UsuarioResumen] = None
+
+    # Relaciones
     reglas: List[ReglaAsignacionSalida] = []
     preguntas: List[PreguntaSalida] = []
     cantidad_preguntas: Optional[int] = 0

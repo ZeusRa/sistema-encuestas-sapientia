@@ -192,14 +192,18 @@ const CrearEncuesta = () => {
         }
     };
 
-    const borrarPregunta = (id_temporal: number) => {
+    const borrarPregunta = (id_temporal: number | string) => {
         if (!esEditable) return;
+            const id = typeof id_temporal === 'string' ? Number(id_temporal) : id_temporal;
+        if (isNaN(id)) {
+            console.error("ID inválido para borrar:", id_temporal);
+        return;
+    }
         if (window.confirm("¿Estás seguro de borrar este elemento?")) {
-            const nuevas = preguntas.filter(p => p.id_temporal !== id_temporal);
-            // Re-indexar el orden
-            const reordenadas = nuevas.map((p, index) => ({ ...p, orden: index + 1 }));
-            setPreguntas(reordenadas);
-        }
+        const nuevas = preguntas.filter(p => p.id_temporal !== id);
+        const reordenadas = nuevas.map((p, index) => ({ ...p, orden: index + 1 }));
+        setPreguntas(reordenadas);
+    }
     };
 
     // Manejador de Drag & Drop

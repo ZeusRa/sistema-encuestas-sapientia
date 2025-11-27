@@ -81,6 +81,40 @@ class Encuesta(Base):
     preguntas = relationship("Pregunta", back_populates="encuesta", cascade="all, delete-orphan")
     asignaciones = relationship("AsignacionUsuario", back_populates="encuesta")
 
+    usuario_creacion = Column(
+        Integer,
+        ForeignKey("encuestas_oltp.usuario_admin.id_admin", ondelete="RESTRICT"),
+        nullable=False
+    )
+    usuario_modificacion = Column(
+        Integer,
+        ForeignKey("encuestas_oltp.usuario_admin.id_admin", ondelete="SET NULL"),
+        nullable=True
+    )
+    fecha_creacion = Column(
+        DateTime,
+        server_default=func.now(), # ← establece automáticamente en INSERT
+        nullable=False
+    )
+    fecha_modificacion = Column(
+        DateTime,
+        onupdate=func.now(),  # ← actualiza automáticamente en UPDATE
+        nullable=True
+    )
+
+ # === RELACIONES ===
+    creador = relationship(
+        "UsuarioAdmin",
+        foreign_keys=[usuario_creacion],
+        backref="encuestas_creadas"
+    )
+    modificador = relationship(
+        "UsuarioAdmin",
+        foreign_keys=[usuario_modificacion],
+        backref="encuestas_modificadas"
+    )
+
+
     @property
     def cantidad_preguntas(self):
         return sum(1 for p in self.preguntas if p.tipo != TipoPregunta.seccion)

@@ -17,7 +17,6 @@ create type encuestas_oltp.estado_encuesta as enum ('borrador','publicado','en c
 CREATE TYPE encuestas_oltp.tipo_pregunta AS ENUM ('texto_libre', 'opcion_unica', 'opcion_multiple', 'matriz','seccion');
 CREATE TYPE encuestas_oltp.estado_asignacion AS ENUM ('pendiente', 'realizada', 'cancelada');
 CREATE TYPE encuestas_oltp.publico_objetivo AS ENUM ('alumnos', 'docentes', 'ambos');
--- Eliminado PROFESOR del enum de roles administrativos
 CREATE TYPE encuestas_oltp.rol_admin AS ENUM ('ADMINISTRADOR', 'DIRECTIVO');
 
 -- Tabla: Usuarios Administrativos
@@ -31,15 +30,27 @@ CREATE TABLE encuestas_oltp.usuario_admin (
 
 -- Tabla: Encuestas
 CREATE TABLE encuestas_oltp.encuesta (
-    id SERIAL PRIMARY KEY,
-    nombre VARCHAR(100) NOT NULL,
-    descripcion TEXT,
-    fecha_inicio TIMESTAMP NOT NULL,
-    fecha_fin TIMESTAMP NOT NULL,
-    prioridad encuestas_oltp.prioridad_encuesta NOT NULL,
-    accion_disparadora encuestas_oltp.accion_disparadora NOT NULL,
-    activo BOOLEAN DEFAULT TRUE
+	id serial4 NOT NULL,
+	nombre varchar(100) NOT NULL,
+	descripcion text NULL,
+	fecha_inicio timestamp NOT NULL,
+	fecha_fin timestamp NOT NULL,
+	prioridad encuestas_oltp.prioridad_encuesta NOT NULL,
+	activo bool DEFAULT true NULL,
+	estado encuestas_oltp.estado_encuesta DEFAULT 'borrador'::encuestas_oltp.estado_encuesta NULL,
+	acciones_disparadoras jsonb DEFAULT '[]'::jsonb NULL,
+	configuracion jsonb DEFAULT '{}'::jsonb NULL,
+	mensaje_final text NULL,
+	usuario_creacion int4 NOT NULL,
+	fecha_creacion timestamp DEFAULT CURRENT_TIMESTAMP NULL,
+	usuario_modificacion int4 NULL,
+	fecha_modificacion timestamp NULL,
+	CONSTRAINT encuesta_pkey PRIMARY KEY (id),
+	CONSTRAINT fk_encuesta_admin_creacion FOREIGN KEY (usuario_creacion) REFERENCES encuestas_oltp.usuario_admin(id_admin) ON DELETE RESTRICT ON UPDATE CASCADE,
+	CONSTRAINT fk_encuesta_admin_modificacion FOREIGN KEY (usuario_modificacion) REFERENCES encuestas_oltp.usuario_admin(id_admin) ON DELETE RESTRICT ON UPDATE CASCADE
 );
+CREATE INDEX idx_encuesta_id_admin_creacion ON encuestas_oltp.encuesta USING btree (usuario_creacion);
+CREATE INDEX idx_encuesta_id_admin_modificacion ON encuestas_oltp.encuesta USING btree (usuario_modificacion);
 
 -- Tabla: Reglas de Asignación
 CREATE TABLE encuestas_oltp.regla_asignacion (
