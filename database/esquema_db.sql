@@ -13,7 +13,8 @@ CREATE SCHEMA IF NOT EXISTS encuestas_olap;
 -- Tipos ENUM
 CREATE TYPE encuestas_oltp.prioridad_encuesta AS ENUM ('obligatoria', 'opcional', 'evaluacion_docente');
 CREATE TYPE encuestas_oltp.accion_disparadora AS ENUM ('al_iniciar_sesion', 'al_ver_curso', 'al_inscribir_examen');
-CREATE TYPE encuestas_oltp.tipo_pregunta AS ENUM ('texto_libre', 'opcion_unica', 'opcion_multiple', 'matriz');
+create type encuestas_oltp.estado_encuesta as enum ('borrador','publicado','en curso','finalizado');
+CREATE TYPE encuestas_oltp.tipo_pregunta AS ENUM ('texto_libre', 'opcion_unica', 'opcion_multiple', 'matriz','seccion');
 CREATE TYPE encuestas_oltp.estado_asignacion AS ENUM ('pendiente', 'realizada', 'cancelada');
 CREATE TYPE encuestas_oltp.publico_objetivo AS ENUM ('alumnos', 'docentes', 'ambos');
 -- Eliminado PROFESOR del enum de roles administrativos
