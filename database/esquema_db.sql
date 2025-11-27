@@ -26,7 +26,6 @@ CREATE TABLE encuestas_oltp.usuario_admin (
     nombre_usuario VARCHAR(50) NOT NULL UNIQUE,
     clave_encriptada VARCHAR(255) NOT NULL,
     rol encuestas_oltp.rol_admin NOT NULL,
-    -- Eliminado id_profesor_contexto ya que no acceden por aquí
     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
