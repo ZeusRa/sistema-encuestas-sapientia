@@ -23,11 +23,20 @@ class UsuarioAdminBase(EsquemaBase):
     rol: RolAdmin
 
 class UsuarioAdminCrear(UsuarioAdminBase):
-    clave: str # Se recibe en texto plano, se encripta en el backend
+    clave: Optional[str] = None # Opcional: si no se envía, se genera una genérica
 
 class UsuarioAdminSalida(UsuarioAdminBase):
     id_admin: int
     fecha_creacion: datetime
+    fecha_ultimo_login: Optional[datetime] = None
+    activo: bool
+    debe_cambiar_clave: bool
+
+class UsuarioActualizarEstado(BaseModel):
+    activo: bool
+
+class UsuarioActualizarRol(BaseModel):
+    rol: RolAdmin
 
 # Esquemas para el Login (JWT)
 class SolicitudLogin(BaseModel):
@@ -41,6 +50,15 @@ class Token(BaseModel):
 class DatosToken(BaseModel):
     nombre_usuario: Optional[str] = None
     rol: Optional[str] = None
+
+class CambioClave(BaseModel):
+    clave_actual: str
+    clave_nueva: str
+    confirmacion_clave_nueva: str
+
+    @property
+    def claves_coinciden(self) -> bool:
+        return self.clave_nueva == self.confirmacion_clave_nueva
 
 # =============================================================================
 # GESTIÓN DE ENCUESTAS (Configuración)

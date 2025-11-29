@@ -59,6 +59,9 @@ class UsuarioAdmin(Base):
     clave_encriptada = Column(String(255), nullable=False)
     rol = Column(Enum(RolAdmin, schema="encuestas_oltp"), nullable=False)
     fecha_creacion = Column(DateTime, nullable=False)
+    fecha_ultimo_login = Column(DateTime, nullable=True)
+    activo = Column(Boolean, default=True, nullable=False)
+    debe_cambiar_clave = Column(Boolean, default=False, nullable=False)
 
 class Encuesta(Base):
     __tablename__ = "encuesta"
