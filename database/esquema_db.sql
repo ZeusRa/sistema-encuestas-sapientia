@@ -25,7 +25,10 @@ CREATE TABLE encuestas_oltp.usuario_admin (
     nombre_usuario VARCHAR(50) NOT NULL UNIQUE,
     clave_encriptada VARCHAR(255) NOT NULL,
     rol encuestas_oltp.rol_admin NOT NULL,
-    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    fecha_creacion TIMESTAMP DEFAULT NOW(),
+    fecha_ultimo_login TIMESTAMP,
+    activo BOOLEAN DEFAULT TRUE NOT NULL,
+    debe_cambiar_clave BOOLEAN DEFAULT FALSE NOT NULL
 );
 
 -- Tabla: Encuestas
