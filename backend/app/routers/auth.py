@@ -17,6 +17,17 @@ router = APIRouter(tags=["Autenticación"])
 # Dependencia para extraer el token del header Authorization
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
+# Dependencia para verificar permisos
+def requiere_permiso(codigo_permiso: str):
+    def _dependencia(usuario: UsuarioAdmin = Depends(obtener_usuario_actual)):
+        if codigo_permiso not in usuario.permisos:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"No tienes permiso para: {codigo_permiso}"
+            )
+        return usuario
+    return _dependencia
+
 def obtener_usuario_actual(token: str = Depends(oauth2_scheme), bd: Session = Depends(obtener_bd)):
     """
     Decodifica el token JWT y recupera el usuario actual de la base de datos.
@@ -38,7 +49,69 @@ def obtener_usuario_actual(token: str = Depends(oauth2_scheme), bd: Session = De
     usuario = bd.query(UsuarioAdmin).filter(UsuarioAdmin.nombre_usuario == token_datos.nombre_usuario).first()
     if usuario is None:
         raise credenciales_exception
+
+    # Cargar permisos del usuario (rol + individuales)
+    # Permisos del rol
+    permisos_rol = {
+        p.codigo for p in bd.query(Permiso.codigo)
+        .join(RolPermiso, Permiso.id_permiso == RolPermiso.id_permiso)
+        .filter(RolPermiso.id_rol == usuario.rol)
+        .all()
+    }
+
+    # Permisos individuales
+    permisos_individuales = {
+        p.permiso.codigo: p.tiene 
+        for p in bd.query(UsuarioPermiso)
+        .join(Permiso)
+        .filter(UsuarioPermiso.id_usuario == usuario.id_admin)
+        .all()
+    }
+
+    # Combinar: si hay permiso individual, sobrescribe el del rol
+    permisos_finales = set(permisos_rol)  # copia
+    for codigo, tiene in permisos_individuales.items():
+        if tiene:
+            permisos_finales.add(codigo)
+        else:
+            permisos_finales.discard(codigo)  # denegación explícita
+
+    # Añadir permisos al objeto usuario 
+    usuario.permisos = permisos_finales 
     return usuario
+
+@router.put("/usuarios/{id_admin}/permisos", response_model=List[str])
+def asignar_permisos_usuario(
+    id_admin: int,
+    permisos: List[AsignacionPermisoUsuario],
+    bd: Session = Depends(obtener_bd),
+    usuario_actual: UsuarioAdmin = Depends(requiere_permiso("usuario:gestionar_permisos"))  # Ej: solo ADMIN
+):
+    # Verificar usuario objetivo
+    usuario_objetivo = bd.query(UsuarioAdmin).filter(UsuarioAdmin.id_admin == id_admin).first()
+    if not usuario_objetivo:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    # Borrar permisos actuales del usuario
+    bd.query(UsuarioPermiso).filter(UsuarioPermiso.id_usuario == id_admin).delete()
+
+    # Asignar nuevos
+    for p in permisos:
+        up = UsuarioPermiso(
+            id_usuario=id_admin,
+            id_permiso=p.id_permiso,
+            tiene=p.tiene
+        )
+        bd.add(up)
+
+    bd.commit()
+
+    # Recargar y devolver permisos actuales (códigos)
+    permisos_actuales = bd.query(Permiso.codigo)\
+        .join(UsuarioPermiso)\
+        .filter(UsuarioPermiso.id_usuario == id_admin, UsuarioPermiso.tiene == True)\
+        .all()
+    return [c[0] for c in permisos_actuales]
 
 @router.post("/token", response_model=Token)
 def login_para_token_acceso(

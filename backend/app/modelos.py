@@ -58,10 +58,38 @@ class UsuarioAdmin(Base):
     nombre_usuario = Column(String(50), unique=True, nullable=False)
     clave_encriptada = Column(String(255), nullable=False)
     rol = Column(Enum(RolAdmin, schema="encuestas_oltp"), nullable=False)
-    fecha_creacion = Column(DateTime, nullable=False)
+    fecha_creacion = Column(DateTime, server_default=func.now(), nullable=False)
     fecha_ultimo_login = Column(DateTime, nullable=True)
     activo = Column(Boolean, default=True, nullable=False)
     debe_cambiar_clave = Column(Boolean, default=False, nullable=False)
+
+class Permiso(Base):
+    __tablename__ = "permiso"
+    __table_args__ = {"schema": "encuestas_oltp"}
+
+    id_permiso = Column(Integer, primary_key=True)
+    codigo = Column(String(50), unique=True, nullable=False)
+    nombre = Column(String(100), nullable=False)
+    categoria = Column(String(30), nullable=False)
+
+class RolPermiso(Base):
+    __tablename__ = "rol_permiso"
+    __table_args__ = {"schema": "encuestas_oltp"}
+
+    id_rol = Column(Enum(RolAdmin, schema="encuestas_oltp"), primary_key=True)
+    id_permiso = Column(Integer, ForeignKey("encuestas_oltp.permiso.id_permiso"), primary_key=True)
+
+    permiso = relationship("Permiso")
+
+class UsuarioPermiso(Base):
+    __tablename__ = "usuario_permiso"
+    __table_args__ = {"schema": "encuestas_oltp"}
+
+    id_usuario = Column(Integer, ForeignKey("encuestas_oltp.usuario_admin.id_admin"), primary_key=True)
+    id_permiso = Column(Integer, ForeignKey("encuestas_oltp.permiso.id_permiso"), primary_key=True)
+    tiene = Column(Boolean, default=True, nullable=False)
+
+    permiso = relationship("Permiso")    
 
 class Encuesta(Base):
     __tablename__ = "encuesta"
