@@ -83,8 +83,8 @@ class RolPermiso(Base):
     __table_args__ = {"schema": "encuestas_oltp"}
 
     id_rol = Column(Enum(RolAdmin, schema="encuestas_oltp"), ForeignKey("encuestas_oltp.usuario_admin.rol"), primary_key=True) # Nota: referencia a enum o solo tipo, el SQL usa id_rol como enum
-    # En SQLAlchemy, ForeignKey a un Enum tiene su lado
-    # Dado que el esquema SQL define id_rol como tipo enum y no FK a una tabla, lo modelamos como columna simple parte de la PK compuesta.
+    # En SQLAlchemy, ForeignKey a un Enum puede ser tricky si no hay tabla de roles.
+    # Dado que el esquema SQL define id_rol como tipo enum y no FK a una tabla, aquí lo modelamos como columna simple parte de la PK compuesta.
     # Pero para consistencia con el SQL proveido:
     # id_rol encuestas_oltp.rol_admin NOT NULL
     id_rol = Column(Enum(RolAdmin, schema="encuestas_oltp"), primary_key=True)

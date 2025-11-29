@@ -42,6 +42,8 @@ interface FormularioEncuesta {
     };
     descripcion?: string;
     mensaje_final?: string;
+    fecha_inicio: string;
+    fecha_fin: string;
 }
 
 const CrearEncuesta = () => {
@@ -73,6 +75,10 @@ const CrearEncuesta = () => {
             responsable: usuario?.sub || 'Admin',
             prioridad: 'opcional',
             acciones_disparadoras: ['al_iniciar_sesion'],
+            // Fechas por defecto: Mañana inicio del día, Pasado mañana fin del día (como placeholder válido)
+            // Backend espera ISO String.
+            fecha_inicio: new Date(new Date().setHours(0, 0, 1, 0)).toISOString().slice(0, 16),
+            fecha_fin: new Date(new Date().setHours(23, 59, 59, 0)).toISOString().slice(0, 16),
             configuracion: {
                 paginacion: 'por_pregunta',
                 mostrar_progreso: 'porcentaje',
@@ -110,6 +116,10 @@ const CrearEncuesta = () => {
             setEstado(data.estado || 'borrador');
             setValue("prioridad", data.prioridad || 'opcional');
             setValue("acciones_disparadoras", data.acciones_disparadoras || []);
+
+            // Cargar fechas (convertir ISO a formato input datetime-local: YYYY-MM-DDTHH:mm)
+            if (data.fecha_inicio) setValue("fecha_inicio", data.fecha_inicio.slice(0, 16));
+            if (data.fecha_fin) setValue("fecha_fin", data.fecha_fin.slice(0, 16));
 
             // Cargar configuración asegurando valores por defecto
             if (data.configuracion) {
@@ -222,14 +232,31 @@ const CrearEncuesta = () => {
     // Acción: Guardar Global
     const onGuardar = async (data: FormularioEncuesta) => {
         setErrorValidacion(false);
+
+        // Validaciones de Fecha
+        const inicio = new Date(data.fecha_inicio);
+        const fin = new Date(data.fecha_fin);
+        const ahora = new Date();
+        // Margen de 1 minuto para evitar errores por milisegundos al crear
+        ahora.setMinutes(ahora.getMinutes() - 1);
+
+        if (esNuevo && inicio < ahora) {
+            toast.error("La fecha de inicio no puede ser anterior a la actual.");
+            return;
+        }
+        if (fin <= inicio) {
+            toast.error("La fecha de fin debe ser posterior a la fecha de inicio.");
+            return;
+        }
+
         console.log("Guardando...", data);
 
         try {
             // Mapeo al formato que espera el backend (schemas.EncuestaCrear)
             const payload = {
                 nombre: data.titulo,
-                fecha_inicio: new Date().toISOString(),
-                fecha_fin: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString(),
+                fecha_inicio: new Date(data.fecha_inicio).toISOString(),
+                fecha_fin: new Date(data.fecha_fin).toISOString(),
                 prioridad: data.prioridad,
                 acciones_disparadoras: data.acciones_disparadoras,
                 configuracion: data.configuracion,
@@ -402,6 +429,26 @@ const CrearEncuesta = () => {
                                     fullWidth
                                     disabled={!esEditable}
                                     {...register("restringido_a")}
+                                />
+                            </Box>
+
+                            {/* Fechas de Inicio y Fin */}
+                            <Box display="flex" gap={2} mt={2}>
+                                <TextField
+                                    label="Inicio"
+                                    type="datetime-local"
+                                    fullWidth
+                                    InputLabelProps={{ shrink: true }}
+                                    {...register("fecha_inicio", { required: true })}
+                                    disabled={!esEditable}
+                                />
+                                <TextField
+                                    label="Fin"
+                                    type="datetime-local"
+                                    fullWidth
+                                    InputLabelProps={{ shrink: true }}
+                                    {...register("fecha_fin", { required: true })}
+                                    disabled={!esEditable}
                                 />
                             </Box>
                         </Grid >
