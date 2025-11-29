@@ -13,6 +13,7 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import PeopleIcon from '@mui/icons-material/People';
+import SecurityIcon from '@mui/icons-material/Security';
 import { usarAuthStore } from '../context/authStore';
 
 const ANCHO_DRAWER = 260;
@@ -106,6 +107,17 @@ const LayoutDashboard = () => {
                     <PeopleIcon />
                   </ListItemIcon>
                   <ListItemText primary="Usuarios" />
+                </ListItemButton>
+
+                <ListItemButton
+                  sx={{ pl: 4, '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}
+                  onClick={() => navegar('/admin/permisos')}
+                  selected={location.pathname === '/admin/permisos'}
+                >
+                  <ListItemIcon sx={{ color: 'inherit' }}>
+                    <SecurityIcon />
+                  </ListItemIcon>
+                  <ListItemText primary="Permisos" />
                 </ListItemButton>
               </List>
             </Collapse>

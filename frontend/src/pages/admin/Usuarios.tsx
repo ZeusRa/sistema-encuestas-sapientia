@@ -4,6 +4,7 @@ import {
   Chip, IconButton, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   MenuItem, Tooltip, CircularProgress
 } from '@mui/material';
+import EditIcon from '@mui/icons-material/Edit';
 import KeyIcon from '@mui/icons-material/Key';
 import BlockIcon from '@mui/icons-material/Block';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -88,17 +89,17 @@ const GestionUsuarios = () => {
   };
 
   const cambiarRol = async (id: number, rolActual: string) => {
-    // Implementación simple toggleando rol para demo, idealmente sería un modal o select
-    const nuevoRol = rolActual === 'ADMINISTRADOR' ? 'DIRECTIVO' : 'ADMINISTRADOR';
-    if (!confirm(`¿Cambiar rol a ${nuevoRol}?`)) return;
+      // Implementación simple toggleando rol para demo, idealmente tendria que preparar un modal
+      const nuevoRol = rolActual === 'ADMINISTRADOR' ? 'DIRECTIVO' : 'ADMINISTRADOR';
+      if (!confirm(`¿Cambiar rol a ${nuevoRol}?`)) return;
 
-    try {
-      await api.put(`/usuarios/${id}/rol`, { rol: nuevoRol });
-      toast.success("Rol actualizado");
-      cargarUsuarios();
-    } catch (error) {
-      toast.error("Error al cambiar rol");
-    }
+      try {
+          await api.put(`/usuarios/${id}/rol`, { rol: nuevoRol });
+          toast.success("Rol actualizado");
+          cargarUsuarios();
+      } catch (error) {
+          toast.error("Error al cambiar rol");
+      }
   }
 
   return (
@@ -129,14 +130,14 @@ const GestionUsuarios = () => {
           </TableHead>
           <TableBody>
             {cargando ? (
-              <TableRow>
-                <TableCell colSpan={5} align="center"><CircularProgress /></TableCell>
-              </TableRow>
+               <TableRow>
+                 <TableCell colSpan={5} align="center"><CircularProgress /></TableCell>
+               </TableRow>
             ) : usuarios.map((user) => (
               <TableRow key={user.id_admin}>
                 <TableCell>
-                  <Typography fontWeight="bold">{user.nombre_usuario}</Typography>
-                  <Typography variant="caption" color="text.secondary">Creado: {format(new Date(user.fecha_creacion), 'dd/MM/yyyy', { locale: es })}</Typography>
+                    <Typography fontWeight="bold">{user.nombre_usuario}</Typography>
+                    <Typography variant="caption" color="text.secondary">Creado: {format(new Date(user.fecha_creacion), 'dd/MM/yyyy', { locale: es })}</Typography>
                 </TableCell>
                 <TableCell>
                   <Chip

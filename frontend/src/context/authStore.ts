@@ -6,6 +6,7 @@ interface UsuarioDecodificado {
   sub: string; // nombre_usuario ('sub' en el estándar JWT)
   rol: string;
   debe_cambiar_clave?: boolean; // Nuevo campo opcional
+  permisos?: string[]; // Lista de códigos de permisos
 }
 
 // Interfaz del Estado Global de Autenticación
@@ -17,9 +18,10 @@ interface EstadoAuth {
   // Acciones (Métodos)
   iniciarSesion: (nuevoToken: string) => void;
   cerrarSesion: () => void;
+  tienePermiso: (codigo: string) => boolean;
 }
 
-export const usarAuthStore = create<EstadoAuth>((set) => {
+export const usarAuthStore = create<EstadoAuth>((set, get) => {
   // Intentar recuperar sesión del localStorage al inicio (Persistencia)
   const tokenGuardado = localStorage.getItem('token_acceso');
   let usuarioInicial = null;
@@ -61,5 +63,13 @@ export const usarAuthStore = create<EstadoAuth>((set) => {
         estaAutenticado: false 
       });
     },
+
+    tienePermiso: (codigo: string) => {
+        const usuario = get().usuario;
+        if (!usuario || !usuario.permisos) return false;
+        // Administrador por defecto tiene todo, pero aquí validamos lista estricta
+        // Si el backend envía todos los permisos para admin, esto funciona igual.
+        return usuario.permisos.includes(codigo);
+    }
   };
 });

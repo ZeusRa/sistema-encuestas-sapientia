@@ -13,6 +13,7 @@ import Encuestas from "./pages/Encuestas";
 import CrearEncuesta from "./pages/CrearEncuesta";
 import CambiarClave from "./pages/CambiarClave";
 import GestionUsuarios from "./pages/admin/Usuarios";
+import GestionPermisos from "./pages/admin/GestionPermisos";
 
 function App() {
   return (
@@ -40,6 +41,7 @@ function App() {
 
               {/* Rutas de Administración */}
               <Route path="/admin/usuarios" element={<GestionUsuarios />} />
+              <Route path="/admin/permisos" element={<GestionPermisos />} />
 
             </Route>
           </Route>
