@@ -51,6 +51,13 @@ function App() {
               <Route path="/admin/usuarios" element={<GestionUsuarios />} />
               <Route path="/admin/permisos" element={<GestionPermisos />} />
               
+              {/* Ruta de Cambio de Clave */}
+              <Route path="/cambiar-clave" element={<CambiarClave />} />
+
+              {/* Rutas de Administración */}
+              <Route path="/admin/usuarios" element={<GestionUsuarios />} />
+              <Route path="/admin/permisos" element={<GestionPermisos />} />
+
             </Route>
           </Route>
 
