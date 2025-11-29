@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
+import { jwtDecode } from 'jwt-decode';
 import api from '../api/axios';
 import { usarAuthStore } from '../context/authStore';
 import { toast } from 'react-toastify';
@@ -62,14 +63,21 @@ const Login = () => {
       
       toast.success(`¡Bienvenido de nuevo!`);
       
-      // Por ahora solo mostramos log, en el siguiente paso redirigiremos al Dashboard
-      console.log("Login Exitoso. Token:", access_token);
-      navegar('/dashboard'); 
+      // Verificar si debe cambiar clave
+      const decoded: any = jwtDecode(access_token);
+      if (decoded.debe_cambiar_clave) {
+        toast.warning("Debes actualizar tu contraseña por seguridad.");
+        navegar('/cambiar-clave');
+      } else {
+        navegar('/dashboard');
+      }
 
     } catch (error: any) {
       console.error("Error de login:", error);
       if (error.response?.status === 401) {
-        setErrorApi("Credenciales incorrectas. Por favor verifica tu usuario y contraseña.");
+        // Puede ser credenciales incorrectas o usuario inactivo
+        const mensaje = error.response?.data?.detail || "Credenciales incorrectas o usuario inactivo.";
+        setErrorApi(mensaje);
       } else {
         setErrorApi("Error de conexión con el servidor. Intenta más tarde.");
       }

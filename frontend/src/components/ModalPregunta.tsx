@@ -3,11 +3,12 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button,
   TextField, Box, Typography, Grid, RadioGroup,
   FormControlLabel, Radio, Tabs, Tab, Checkbox,
-  IconButton, Paper, Tooltip
+  IconButton, Paper, Tooltip, Select, MenuItem, FormControl, InputLabel
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import api from '../api/axios';
 
 // Tipos de datos (deben coincidir con el Backend)
 export type TipoPreguntaFrontend = 'texto_libre' | 'opcion_unica' | 'opcion_multiple' | 'matriz' | 'seccion';
@@ -50,6 +51,34 @@ const ModalPregunta = ({ open, onClose, onSave, preguntaEditar }: Props) => {
   const [obligatoria, setObligatoria] = useState(false);
   const [descripcion, setDescripcion] = useState('');
   const [mensajeError, setMensajeError] = useState('');
+
+  // Plantillas
+  const [plantillas, setPlantillas] = useState<{ id: number; nombre: string; detalles: any[] }[]>([]);
+  const [plantillaSeleccionada, setPlantillaSeleccionada] = useState<string>('');
+
+  useEffect(() => {
+    cargarPlantillas();
+  }, []);
+
+  const cargarPlantillas = async () => {
+    try {
+      const res = await api.get('/plantillas/');
+      setPlantillas(res.data);
+    } catch (error) {
+      console.error("Error al cargar plantillas", error);
+    }
+  };
+
+  const handleCargarPlantilla = (id: number) => {
+    const p = plantillas.find(pl => pl.id === id);
+    if (p) {
+      setPlantillaSeleccionada(String(id));
+      const nuevasOpciones = p.detalles
+        .sort((a: any, b: any) => a.orden - b.orden)
+        .map((d: any) => ({ texto_opcion: d.texto_opcion, orden: d.orden }));
+      setOpciones(nuevasOpciones);
+    }
+  };
 
   // Cargar datos si estamos editando
   useEffect(() => {
@@ -142,6 +171,7 @@ const ModalPregunta = ({ open, onClose, onSave, preguntaEditar }: Props) => {
             {tipo === 'seccion' ? 'Título de la Sección' : 'Pregunta'}
           </Typography>
           <TextField
+            autoFocus // UX: Foco al abrir
             fullWidth
             placeholder={tipo === 'seccion' ? "Ej: Información Personal" : "Ej: ¿Qué opinas...?"}
             variant="standard"
@@ -216,6 +246,21 @@ const ModalPregunta = ({ open, onClose, onSave, preguntaEditar }: Props) => {
                   </Typography>
                 ) : (
                   <>
+                    <Box display="flex" justifyContent="flex-end" mb={2}>
+                        <FormControl size="small" sx={{ minWidth: 200 }}>
+                            <InputLabel>Cargar Plantilla</InputLabel>
+                            <Select
+                                value={plantillaSeleccionada}
+                                label="Cargar Plantilla"
+                                onChange={(e) => handleCargarPlantilla(Number(e.target.value))}
+                            >
+                                {plantillas.map(p => (
+                                    <MenuItem key={p.id} value={p.id}>{p.nombre}</MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                    </Box>
+
                     {opciones.map((opcion, idx) => (
                       <Box key={idx} display="flex" alignItems="center" gap={1} mb={1}>
                         <TextField
