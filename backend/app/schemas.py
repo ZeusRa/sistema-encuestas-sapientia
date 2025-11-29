@@ -42,6 +42,15 @@ class DatosToken(BaseModel):
     nombre_usuario: Optional[str] = None
     rol: Optional[str] = None
 
+class CambioClave(BaseModel):
+    clave_actual: str
+    clave_nueva: str
+    confirmacion_clave_nueva: str
+
+    @property
+    def claves_coinciden(self) -> bool:
+        return self.clave_nueva == self.confirmacion_clave_nueva
+
 # =============================================================================
 # GESTIÓN DE ENCUESTAS (Configuración)
 # =============================================================================
