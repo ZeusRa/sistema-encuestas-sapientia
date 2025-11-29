@@ -38,10 +38,6 @@ class UsuarioActualizarEstado(BaseModel):
 class UsuarioActualizarRol(BaseModel):
     rol: RolAdmin
 
-class AsignacionPermisoUsuario(BaseModel):
-    id_permiso: int
-    tiene: bool = True
-    
 # Esquemas para el Login (JWT)
 class SolicitudLogin(BaseModel):
     usuario: str

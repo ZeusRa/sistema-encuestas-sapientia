@@ -31,26 +31,6 @@ CREATE TABLE encuestas_oltp.usuario_admin (
     debe_cambiar_clave BOOLEAN DEFAULT FALSE NOT NULL
 );
 
---Tabla de permisos (catálogo centralizado)
-CREATE TABLE encuestas_oltp.permiso (
-    id_permiso SERIAL PRIMARY KEY,
-    codigo VARCHAR(50) NOT NULL UNIQUE,       -- Ej: 'encuesta:crear', 'encuesta:leer', 'usuario:gestionar'
-    nombre VARCHAR(100) NOT NULL,             -- Ej: 'Crear encuestas'
-    descripcion TEXT,
-    categoria VARCHAR(30) NOT NULL            -- Ej: 'encuesta', 'usuario', 'reporte'
-);
-
---Relación muchos-a-muchos: qué roles tienen qué permisos
-CREATE TABLE encuestas_oltp.rol_permiso (
-    id_rol encuestas_oltp.rol_admin NOT NULL,  
-    id_permiso INT NOT NULL,
-    PRIMARY KEY (id_rol, id_permiso),
-    FOREIGN KEY (id_permiso) REFERENCES encuestas_oltp.permiso(id_permiso) ON DELETE CASCADE
-);
---Índices para rendimiento
-CREATE INDEX idx_rol_permiso_rol ON encuestas_oltp.rol_permiso (id_rol);
-CREATE INDEX idx_permiso_codigo ON encuestas_oltp.permiso (codigo);
-
 -- Tabla: Encuestas
 CREATE TABLE encuestas_oltp.encuesta (
 	id serial4 NOT NULL,
