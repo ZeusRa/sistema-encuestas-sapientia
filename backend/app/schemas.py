@@ -67,10 +67,6 @@ class PermisoSalida(EsquemaBase):
     descripcion: Optional[str] = None
     categoria: str
 
-class AsignacionPermisoUsuario(BaseModel):
-    id_permiso: int
-    tiene: bool # True para otorgar, False para denegar explícitamente
-
 class AsignacionPermisoRol(BaseModel):
     id_permisos: List[int] # Lista de IDs de permisos a asignar al rol
 
