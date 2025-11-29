@@ -11,6 +11,9 @@ import LayoutDashboard from "./layout/LayoutDashboard";
 import RutaProtegida from "./components/RutaProtegida";
 import Encuestas from "./pages/Encuestas";
 import CrearEncuesta from "./pages/CrearEncuesta";
+import CambiarClave from "./pages/CambiarClave";
+import GestionUsuarios from "./pages/admin/Usuarios";
+import GestionPermisos from "./pages/admin/GestionPermisos";
 
 function App() {
   return (
@@ -33,6 +36,13 @@ function App() {
               <Route path="/encuestas" element={<Encuestas />} />
               <Route path="/encuestas/crear" element={<CrearEncuesta />} /> {/* Nueva Ruta */}
               
+              {/* Ruta de Cambio de Clave */}
+              <Route path="/cambiar-clave" element={<CambiarClave />} />
+
+              {/* Rutas de Administración */}
+              <Route path="/admin/usuarios" element={<GestionUsuarios />} />
+              <Route path="/admin/permisos" element={<GestionPermisos />} />
+
             </Route>
           </Route>
 
