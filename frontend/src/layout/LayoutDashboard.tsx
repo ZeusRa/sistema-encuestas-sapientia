@@ -14,6 +14,7 @@ import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import PeopleIcon from '@mui/icons-material/People';
 import SecurityIcon from '@mui/icons-material/Security';
+import ListAltIcon from '@mui/icons-material/ListAlt';
 import { usarAuthStore } from '../context/authStore';
 
 const ANCHO_DRAWER = 260;
@@ -47,9 +48,10 @@ const LayoutDashboard = () => {
     navegar('/cambiar-clave');
   };
 
+  const [encuestasOpen, setEncuestasOpen] = useState(false);
+
   const menuItems = [
     { texto: 'Dashboard', icono: <DashboardIcon />, ruta: '/dashboard' },
-    { texto: 'Encuestas', icono: <PollIcon />, ruta: '/encuestas' },
   ];
 
   const drawerContent = (
@@ -83,6 +85,41 @@ const LayoutDashboard = () => {
             </ListItemButton>
           </ListItem>
         ))}
+
+        {/* Menú Encuestas con Submenús */}
+        <ListItem disablePadding onClick={() => setEncuestasOpen(!encuestasOpen)}>
+            <ListItemButton sx={{ '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}>
+            <ListItemIcon sx={{ color: 'inherit' }}>
+                <PollIcon />
+            </ListItemIcon>
+            <ListItemText primary="Encuestas" />
+            {encuestasOpen ? <ExpandLess /> : <ExpandMore />}
+            </ListItemButton>
+        </ListItem>
+        <Collapse in={encuestasOpen} timeout="auto" unmountOnExit>
+            <List component="div" disablePadding>
+            <ListItemButton
+                sx={{ pl: 4, '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}
+                onClick={() => navegar('/encuestas')}
+                selected={location.pathname === '/encuestas'}
+            >
+                <ListItemIcon sx={{ color: 'inherit' }}>
+                <PollIcon fontSize='small' />
+                </ListItemIcon>
+                <ListItemText primary="Todas" />
+            </ListItemButton>
+            <ListItemButton
+                sx={{ pl: 4, '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}
+                onClick={() => navegar('/encuestas/plantillas')}
+                selected={location.pathname === '/encuestas/plantillas'}
+            >
+                <ListItemIcon sx={{ color: 'inherit' }}>
+                <ListAltIcon fontSize='small'/>
+                </ListItemIcon>
+                <ListItemText primary="Plantillas" />
+            </ListItemButton>
+            </List>
+        </Collapse>
 
         {/* Menú de Configuración - Solo Administradores */}
         {usuario?.rol === 'ADMINISTRADOR' && (

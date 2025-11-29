@@ -50,6 +50,12 @@ class UsuarioActualizarEstado(BaseModel):
 class UsuarioActualizarRol(BaseModel):
     rol: RolAdmin
 
+class UsuarioActualizarEstado(BaseModel):
+    activo: bool
+
+class UsuarioActualizarRol(BaseModel):
+    rol: RolAdmin
+
 class AsignacionPermisoUsuario(BaseModel):
     id_permiso: int
     tiene: bool = True
@@ -89,6 +95,33 @@ class AsignacionPermisoUsuario(BaseModel):
 
 class AsignacionPermisoRol(BaseModel):
     id_permisos: List[int] # Lista de IDs de permisos a asignar al rol
+
+# =============================================================================
+# PLANTILLAS DE OPCIONES
+# =============================================================================
+
+class PlantillaOpcionDetalleBase(EsquemaBase):
+    texto_opcion: str
+    orden: int
+
+class PlantillaOpcionDetalleCrear(PlantillaOpcionDetalleBase):
+    pass
+
+class PlantillaOpcionDetalleSalida(PlantillaOpcionDetalleBase):
+    id: int
+    id_plantilla: int
+
+class PlantillaOpcionesBase(EsquemaBase):
+    nombre: str
+    descripcion: Optional[str] = None
+
+class PlantillaOpcionesCrear(PlantillaOpcionesBase):
+    detalles: List[PlantillaOpcionDetalleCrear] = []
+
+class PlantillaOpcionesSalida(PlantillaOpcionesBase):
+    id: int
+    fecha_creacion: datetime
+    detalles: List[PlantillaOpcionDetalleSalida] = []
 
 # =============================================================================
 # GESTIÓN DE ENCUESTAS (Configuración)

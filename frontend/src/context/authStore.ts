@@ -67,7 +67,7 @@ export const usarAuthStore = create<EstadoAuth>((set, get) => {
     tienePermiso: (codigo: string) => {
         const usuario = get().usuario;
         if (!usuario || !usuario.permisos) return false;
-        // Administrador por defecto tiene todo, pero aquí validamos lista estricta
+        // Administrador por defecto suele tener todo, pero aquí validamos lista estricta
         // Si el backend envía todos los permisos para admin, esto funciona igual.
         return usuario.permisos.includes(codigo);
     }

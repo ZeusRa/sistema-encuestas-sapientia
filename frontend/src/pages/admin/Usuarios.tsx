@@ -89,7 +89,7 @@ const GestionUsuarios = () => {
   };
 
   const cambiarRol = async (id: number, rolActual: string) => {
-      // Implementación simple toggleando rol para demo, idealmente tendria que preparar un modal
+      // Implementación simple toggleando rol para demo, idealmente sería un modal o select
       const nuevoRol = rolActual === 'ADMINISTRADOR' ? 'DIRECTIVO' : 'ADMINISTRADOR';
       if (!confirm(`¿Cambiar rol a ${nuevoRol}?`)) return;
 

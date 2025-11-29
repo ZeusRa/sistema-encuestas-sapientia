@@ -15,6 +15,7 @@ import CambiarClave from "./pages/CambiarClave";
 import GestionUsuarios from "./pages/admin/Usuarios";
 import GestionPermisos from "./pages/admin/GestionPermisos";
 import VistaPreviaEncuesta from "./pages/VistaPreviaEncuesta";
+import Plantillas from "./pages/Plantillas";
 
 function App() {
   return (
@@ -41,6 +42,14 @@ function App() {
               {/* Rutas de Encuestas */}
               <Route path="/encuestas" element={<Encuestas />} />
               <Route path="/encuestas/crear" element={<CrearEncuesta />} /> {/* Nueva Ruta */}
+              <Route path="/encuestas/plantillas" element={<Plantillas />} />
+
+              {/* Ruta de Cambio de Clave */}
+              <Route path="/cambiar-clave" element={<CambiarClave />} />
+
+              {/* Rutas de Administración */}
+              <Route path="/admin/usuarios" element={<GestionUsuarios />} />
+              <Route path="/admin/permisos" element={<GestionPermisos />} />
               
               {/* Ruta de Cambio de Clave */}
               <Route path="/cambiar-clave" element={<CambiarClave />} />

@@ -397,6 +397,7 @@ const CrearEncuesta = () => {
                         {/* Título Gigante (Input transparente) */}
                         <Grid size={12}>
                             <TextField
+                                autoFocus // UX: Foco al abrir
                                 fullWidth
                                 placeholder="Por ejemplo, Encuesta de Evaluación de Docentes"
                                 variant="standard"

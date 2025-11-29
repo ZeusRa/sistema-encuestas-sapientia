@@ -103,6 +103,28 @@ class UsuarioPermiso(Base):
     usuario = relationship("UsuarioAdmin", back_populates="permisos_especificos")
     permiso = relationship("Permiso", back_populates="asignaciones_usuario")
 
+class PlantillaOpciones(Base):
+    __tablename__ = "plantilla_opciones"
+    __table_args__ = {"schema": "encuestas_oltp"}
+
+    id = Column(Integer, primary_key=True)
+    nombre = Column(String(100), nullable=False)
+    descripcion = Column(Text, nullable=True)
+    fecha_creacion = Column(DateTime, server_default=func.now())
+
+    detalles = relationship("PlantillaOpcionDetalle", back_populates="plantilla", cascade="all, delete-orphan")
+
+class PlantillaOpcionDetalle(Base):
+    __tablename__ = "plantilla_opcion_detalle"
+    __table_args__ = {"schema": "encuestas_oltp"}
+
+    id = Column(Integer, primary_key=True)
+    id_plantilla = Column(Integer, ForeignKey("encuestas_oltp.plantilla_opciones.id"), nullable=False)
+    texto_opcion = Column(String(255), nullable=False)
+    orden = Column(Integer, nullable=False)
+
+    plantilla = relationship("PlantillaOpciones", back_populates="detalles")
+
 class Encuesta(Base):
     __tablename__ = "encuesta"
     __table_args__ = {"schema": "encuestas_oltp"}
