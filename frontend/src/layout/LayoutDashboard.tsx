@@ -2,13 +2,17 @@ import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { 
   Box, Toolbar, AppBar, IconButton, Typography, Drawer, List, 
-  ListItem, ListItemButton, ListItemIcon, ListItemText, Divider, Avatar, Menu, MenuItem
+  ListItem, ListItemButton, ListItemIcon, ListItemText, Divider, Avatar, Menu, MenuItem, Collapse
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import LogoutIcon from '@mui/icons-material/Logout';
 import LockResetIcon from '@mui/icons-material/LockReset';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import PollIcon from '@mui/icons-material/Poll';
+import SettingsIcon from '@mui/icons-material/Settings';
+import ExpandLess from '@mui/icons-material/ExpandLess';
+import ExpandMore from '@mui/icons-material/ExpandMore';
+import PeopleIcon from '@mui/icons-material/People';
 import { usarAuthStore } from '../context/authStore';
 
 const ANCHO_DRAWER = 260;
@@ -16,6 +20,7 @@ const ANCHO_DRAWER = 260;
 const LayoutDashboard = () => {
   const [movilOpen, setMovilOpen] = useState(false);
   const [anchorElUsuario, setAnchorElUsuario] = useState<null | HTMLElement>(null);
+  const [configuracionOpen, setConfiguracionOpen] = useState(false); // Estado para menú desplegable de Configuración
 
   const cerrarSesion = usarAuthStore(state => state.cerrarSesion);
   const usuario = usarAuthStore(state => state.usuario);
@@ -77,6 +82,35 @@ const LayoutDashboard = () => {
             </ListItemButton>
           </ListItem>
         ))}
+
+        {/* Menú de Configuración - Solo Administradores */}
+        {usuario?.rol === 'ADMINISTRADOR' && (
+          <>
+            <ListItem disablePadding onClick={() => setConfiguracionOpen(!configuracionOpen)}>
+              <ListItemButton sx={{ '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}>
+                <ListItemIcon sx={{ color: 'inherit' }}>
+                  <SettingsIcon />
+                </ListItemIcon>
+                <ListItemText primary="Configuración" />
+                {configuracionOpen ? <ExpandLess /> : <ExpandMore />}
+              </ListItemButton>
+            </ListItem>
+            <Collapse in={configuracionOpen} timeout="auto" unmountOnExit>
+              <List component="div" disablePadding>
+                <ListItemButton
+                  sx={{ pl: 4, '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}
+                  onClick={() => navegar('/admin/usuarios')}
+                  selected={location.pathname === '/admin/usuarios'}
+                >
+                  <ListItemIcon sx={{ color: 'inherit' }}>
+                    <PeopleIcon />
+                  </ListItemIcon>
+                  <ListItemText primary="Usuarios" />
+                </ListItemButton>
+              </List>
+            </Collapse>
+          </>
+        )}
       </List>
     </Box>
   );

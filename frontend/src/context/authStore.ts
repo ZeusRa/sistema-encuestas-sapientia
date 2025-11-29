@@ -5,6 +5,7 @@ import { jwtDecode } from 'jwt-decode';
 interface UsuarioDecodificado {
   sub: string; // nombre_usuario ('sub' en el estándar JWT)
   rol: string;
+  debe_cambiar_clave?: boolean; // Nuevo campo opcional
 }
 
 // Interfaz del Estado Global de Autenticación

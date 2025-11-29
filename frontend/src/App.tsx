@@ -12,6 +12,7 @@ import RutaProtegida from "./components/RutaProtegida";
 import Encuestas from "./pages/Encuestas";
 import CrearEncuesta from "./pages/CrearEncuesta";
 import CambiarClave from "./pages/CambiarClave";
+import GestionUsuarios from "./pages/admin/Usuarios";
 
 function App() {
   return (
@@ -36,6 +37,9 @@ function App() {
               
               {/* Ruta de Cambio de Clave */}
               <Route path="/cambiar-clave" element={<CambiarClave />} />
+
+              {/* Rutas de Administración */}
+              <Route path="/admin/usuarios" element={<GestionUsuarios />} />
 
             </Route>
           </Route>

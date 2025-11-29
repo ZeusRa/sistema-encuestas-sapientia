@@ -23,11 +23,20 @@ class UsuarioAdminBase(EsquemaBase):
     rol: RolAdmin
 
 class UsuarioAdminCrear(UsuarioAdminBase):
-    clave: str # Se recibe en texto plano, se encripta en el backend
+    clave: Optional[str] = None # Opcional: si no se envía, se genera una genérica
 
 class UsuarioAdminSalida(UsuarioAdminBase):
     id_admin: int
     fecha_creacion: datetime
+    fecha_ultimo_login: Optional[datetime] = None
+    activo: bool
+    debe_cambiar_clave: bool
+
+class UsuarioActualizarEstado(BaseModel):
+    activo: bool
+
+class UsuarioActualizarRol(BaseModel):
+    rol: RolAdmin
 
 # Esquemas para el Login (JWT)
 class SolicitudLogin(BaseModel):
