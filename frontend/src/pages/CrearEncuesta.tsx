@@ -17,11 +17,13 @@ import PublishIcon from '@mui/icons-material/Publish';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ViewHeadlineIcon from '@mui/icons-material/ViewHeadline';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import { useForm, Controller } from 'react-hook-form';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api/axios';
 import { toast } from 'react-toastify';
 import { usarAuthStore } from '../context/authStore';
+import { useDebounce } from '../hooks/useDebounce'; // Asegurarse de tener este hook o implementarlo
 
 import ModalPregunta, { type PreguntaFrontend } from '../components/ModalPregunta';
 
@@ -140,12 +142,16 @@ const CrearEncuesta = () => {
                 obligatoria: p.configuracion_json?.obligatoria || false,
                 mensaje_error: p.configuracion_json?.mensaje_error || '',
                 descripcion: p.configuracion_json?.descripcion || '',
+                // Mapeo inverso de matriz si existe
+                columnas_matriz: p.configuracion_json?.columnas?.map((c:any) => c.texto) || [],
+                // Si es matriz, las filas suelen guardarse en config o en opciones, aquí asumimos opciones
                 opciones: p.opciones.map((o: any) => ({
                     texto_opcion: o.texto_opcion,
                     orden: o.orden
                 }))
             }));
-            setPreguntas(preguntasMapeadas);
+            // Ordenar estrictamente por el campo orden
+            setPreguntas(preguntasMapeadas.sort((a, b) => a.orden - b.orden));
 
         } catch (error) {
             console.error("Error cargando encuesta:", error);
@@ -193,12 +199,20 @@ const CrearEncuesta = () => {
             setPreguntas(prev => prev.map(p => p.id_temporal === pregunta.id_temporal ? pregunta : p));
         } else {
             // Crear nueva (asignar orden al final)
+            // Aseguramos que el ID temporal sea único si venimos de "Guardar y Nuevo"
+            // El modal ya genera un ID nuevo, pero validamos aquí
             const nuevaConOrden = { ...pregunta, orden: preguntas.length + 1 };
             setPreguntas(prev => [...prev, nuevaConOrden]);
         }
 
+        // AUTO-SAVE IMPLÍCITO (Disparar efecto)
+        // Nota: Al actualizar estado 'preguntas', el efecto de auto-save se activará abajo
+
         if (!crearOtra) {
             setModalAbierto(false);
+        } else {
+            // Si es crear otra, reseteamos el estado de edición para que el modal sepa que es nueva
+            setPreguntaEditando(null);
         }
     };
 
@@ -229,9 +243,9 @@ const CrearEncuesta = () => {
         setPreguntas(updatedItems);
     };
 
-    // Acción: Guardar Global
-    const onGuardar = async (data: FormularioEncuesta) => {
-        setErrorValidacion(false);
+    // Acción: Guardar Global (Manual o Auto)
+    const onGuardar = async (data: FormularioEncuesta, silencioso = false) => {
+        if (!silencioso) setErrorValidacion(false);
 
         // Validaciones de Fecha
         const inicio = new Date(data.fecha_inicio);
@@ -249,7 +263,7 @@ const CrearEncuesta = () => {
             return;
         }
 
-        console.log("Guardando...", data);
+        if (!silencioso) console.log("Guardando...", data);
 
         try {
             // Mapeo al formato que espera el backend (schemas.EncuestaCrear)
@@ -274,7 +288,11 @@ const CrearEncuesta = () => {
                     configuracion_json: {
                         obligatoria: p.obligatoria,
                         mensaje_error: p.mensaje_error,
-                        descripcion: p.descripcion
+                        descripcion: p.descripcion,
+                        // Mapeo de campos extra de matriz
+                        filas: p.filas, // Si existen
+                        columnas: p.columnas, // Si existen
+                        seleccion_multiple_matriz: p.seleccion_multiple_matriz
                     },
                     activo: true,
                     opciones: p.opciones.map((o, i) => ({
@@ -286,26 +304,36 @@ const CrearEncuesta = () => {
 
             if (esNuevo) {
                 const res = await api.post('/admin/encuestas/', payload);
-                toast.success("Encuesta creada exitosamente");
+                if (!silencioso) toast.success("Encuesta creada exitosamente");
                 setEsNuevo(false);
                 navigate(`/encuestas/crear?id=${res.data.id}`, { replace: true });
             } else {
                 // PUT: Actualización
                 const res = await api.put(`/admin/encuestas/${idEncuesta}`, payload);
-                toast.success("Encuesta actualizada exitosamente");
+                if (!silencioso) toast.success("Encuesta actualizada exitosamente");
                 // Actualizar estado local con la respuesta para asegurar sincronía
                 setEstado(res.data.estado);
             }
-
-            // Opcional: volver a la lista o quedarse
-            // navigate('/encuestas'); 
         } catch (error: any) {
             console.error(error);
-            // Mostrar error detallado si el backend lo envía
-            const msj = error.response?.data?.detail || "Error al guardar la encuesta";
-            toast.error(msj);
+            if (!silencioso) {
+                const msj = error.response?.data?.detail || "Error al guardar la encuesta";
+                toast.error(msj);
+            }
         }
     };
+
+    // Auto-save Effect
+    // Escuchamos cambios en 'preguntas' y valores del formulario
+    const values = watch();
+    useEffect(() => {
+        if (!esNuevo && idEncuesta) { // Solo auto-guardar si ya existe
+            const timer = setTimeout(() => {
+                onGuardar(values, true);
+            }, 2000); // 2 segundos de debounce
+            return () => clearTimeout(timer);
+        }
+    }, [values, preguntas]); // Dependencias: formulario y estructura preguntas
 
     // Acciones de Estado
     const cambiarEstadoEncuesta = async (nuevoEstado: 'publicar' | 'finalizar') => {
@@ -331,6 +359,11 @@ const CrearEncuesta = () => {
     // Acción: Finalizar
     const onFinalizar = async () => {
         cambiarEstadoEncuesta('finalizar');
+    };
+
+    // Acción: Probar
+    const onProbar = () => {
+        if (idEncuesta) window.open(`/encuestas/prueba/${idEncuesta}`, '_blank');
     };
 
     // Acción: Descartar (X)
@@ -376,6 +409,9 @@ const CrearEncuesta = () => {
                     </Box>
                 </Box>
                 <Box display="flex" gap={1}>
+                    {!esNuevo && (
+                        <Button variant="outlined" startIcon={<PlayArrowIcon />} onClick={onProbar} sx={{ textTransform: 'none' }}>Probar</Button>
+                    )}
                     {!esNuevo && estado === 'borrador' && (
                         <Button variant="contained" color="success" startIcon={<PublishIcon />} onClick={onPublicar} sx={{ textTransform: 'none' }}>Publicar</Button>
                     )}

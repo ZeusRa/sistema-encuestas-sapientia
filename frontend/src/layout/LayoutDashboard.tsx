@@ -15,6 +15,10 @@ import ExpandMore from '@mui/icons-material/ExpandMore';
 import PeopleIcon from '@mui/icons-material/People';
 import SecurityIcon from '@mui/icons-material/Security';
 import ListAltIcon from '@mui/icons-material/ListAlt';
+import SignalWifiOffIcon from '@mui/icons-material/SignalWifiOff';
+import { toast } from 'react-toastify';
+import { useEffect } from 'react';
+import api from '../api/axios';
 import { usarAuthStore } from '../context/authStore';
 
 const ANCHO_DRAWER = 260;
@@ -23,11 +27,38 @@ const LayoutDashboard = () => {
   const [movilOpen, setMovilOpen] = useState(false);
   const [anchorElUsuario, setAnchorElUsuario] = useState<null | HTMLElement>(null);
   const [configuracionOpen, setConfiguracionOpen] = useState(false); // Estado para menú desplegable de Configuración
+  const [desconectado, setDesconectado] = useState(false);
 
   const cerrarSesion = usarAuthStore(state => state.cerrarSesion);
   const usuario = usarAuthStore(state => state.usuario);
   const navegar = useNavigate();
   const location = useLocation();
+
+  // Heartbeat para detectar conexión
+  useEffect(() => {
+    const verificarConexion = async () => {
+      try {
+        await api.get('/'); // Endpoint ligero
+        if (desconectado) {
+            setDesconectado(false);
+            toast.dismiss("toast-desconexion");
+            toast.success("Conexión restablecida");
+        }
+      } catch (error) {
+        if (!desconectado) {
+            setDesconectado(true);
+            toast.error("Sin conexión con el servidor. Funcionalidad limitada.", {
+                autoClose: false,
+                toastId: "toast-desconexion",
+                icon: <SignalWifiOffIcon />
+            });
+        }
+      }
+    };
+
+    const intervalo = setInterval(verificarConexion, 30000); // 30 segundos
+    return () => clearInterval(intervalo);
+  }, [desconectado]);
 
   const handleAbrirMenuUsuario = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorElUsuario(event.currentTarget);
@@ -172,10 +203,19 @@ const LayoutDashboard = () => {
           <IconButton color="inherit" edge="start" onClick={() => setMovilOpen(!movilOpen)} sx={{ mr: 2, display: { sm: 'none' } }}>
             <MenuIcon />
           </IconButton>
-          <Box sx={{ flexGrow: 1 }}>
+          <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', gap: 2 }}>
             <Typography variant="h6" noWrap component="div" color="primary.main" fontWeight="bold">
               {menuItems.find(m => m.ruta === location.pathname)?.texto || 'Inicio'}
             </Typography>
+            {desconectado && (
+                <Chip
+                    icon={<SignalWifiOffIcon />}
+                    label="Desconectado"
+                    color="error"
+                    size="small"
+                    variant="outlined"
+                />
+            )}
           </Box>
           
           {/* Info Usuario */}

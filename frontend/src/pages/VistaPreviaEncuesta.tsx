@@ -20,6 +20,10 @@ interface Pregunta {
     opciones: { id: number; texto: string; orden: number }[];
     obligatoria: boolean;
     mensaje_error?: string;
+    // Matriz
+    filas?: { texto: string; orden: number }[];
+    columnas?: { texto: string; orden: number }[];
+    seleccion_multiple_matriz?: boolean;
 }
 
 interface Seccion {
@@ -81,7 +85,11 @@ const VistaPreviaEncuesta = () => {
                         orden: o.orden
                     })),
                     obligatoria: p.configuracion_json?.obligatoria || false,
-                    mensaje_error: p.configuracion_json?.mensaje_error || 'Esta pregunta es obligatoria'
+                    mensaje_error: p.configuracion_json?.mensaje_error || 'Esta pregunta es obligatoria',
+                    // Matriz
+                    filas: p.configuracion_json?.filas || [],
+                    columnas: p.configuracion_json?.columnas || [],
+                    seleccion_multiple_matriz: p.configuracion_json?.seleccion_multiple_matriz || false
                 }));
 
             let estructuraPaginada: Seccion[] = [];
@@ -337,6 +345,68 @@ const VistaPreviaEncuesta = () => {
                                         );
                                     })}
                                 </FormGroup>
+                            )}
+
+                            {pregunta.tipo === 'matriz' && (
+                                <Box sx={{ overflowX: 'auto' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                        <thead>
+                                            <tr>
+                                                <th style={{ padding: 8 }}></th>
+                                                {pregunta.columnas?.map((col, idx) => (
+                                                    <th key={idx} style={{ padding: 8, textAlign: 'center', borderBottom: '1px solid #ddd' }}>
+                                                        <Typography variant="body2" fontWeight="bold">{col.texto}</Typography>
+                                                    </th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {pregunta.filas?.map((fila, idxFila) => (
+                                                <tr key={idxFila} style={{ borderBottom: '1px solid #eee' }}>
+                                                    <td style={{ padding: 8 }}>
+                                                        <Typography variant="body2">{fila.texto}</Typography>
+                                                    </td>
+                                                    {pregunta.columnas?.map((col, idxCol) => {
+                                                        const key = `${idxFila}-${idxCol}`; // Identificador celda (fila-col)
+                                                        // Guardamos respuesta como objeto: { [filaIndex]: colIndex } o { [filaIndex]: [colIndex1, colIndex2] }
+                                                        const respFila = respuestas[pregunta.id]?.[idxFila];
+
+                                                        const isChecked = pregunta.seleccion_multiple_matriz
+                                                            ? (Array.isArray(respFila) && respFila.includes(idxCol))
+                                                            : respFila === idxCol;
+
+                                                        return (
+                                                            <td key={idxCol} style={{ padding: 8, textAlign: 'center' }}>
+                                                                {pregunta.seleccion_multiple_matriz ? (
+                                                                    <Checkbox
+                                                                        checked={isChecked}
+                                                                        onChange={(e) => {
+                                                                            const current = (respuestas[pregunta.id] || {});
+                                                                            const filaVals = current[idxFila] || [];
+                                                                            const newFilaVals = e.target.checked
+                                                                                ? [...filaVals, idxCol]
+                                                                                : filaVals.filter((v: number) => v !== idxCol);
+
+                                                                            handleRespuestaChange(pregunta.id, { ...current, [idxFila]: newFilaVals });
+                                                                        }}
+                                                                    />
+                                                                ) : (
+                                                                    <Radio
+                                                                        checked={isChecked}
+                                                                        onChange={() => {
+                                                                            const current = (respuestas[pregunta.id] || {});
+                                                                            handleRespuestaChange(pregunta.id, { ...current, [idxFila]: idxCol });
+                                                                        }}
+                                                                    />
+                                                                )}
+                                                            </td>
+                                                        );
+                                                    })}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </Box>
                             )}
                         </Box>
 

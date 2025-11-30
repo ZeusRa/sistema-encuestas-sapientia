@@ -67,6 +67,10 @@ class PermisoSalida(EsquemaBase):
     descripcion: Optional[str] = None
     categoria: str
 
+class AsignacionPermisoUsuario(BaseModel):
+    id_permiso: int
+    tiene: bool # True para otorgar, False para denegar explícitamente
+
 class AsignacionPermisoRol(BaseModel):
     id_permisos: List[int] # Lista de IDs de permisos a asignar al rol
 
@@ -118,7 +122,14 @@ class PreguntaBase(EsquemaBase):
     texto_pregunta: str
     orden: int
     tipo: TipoPregunta
-    configuracion_json: Optional[Dict[str, Any]] = None # Ej: {"max_opciones": 3}
+    # Configuración extendida para soportar matrices:
+    # {
+    #   "obligatoria": bool,
+    #   "filas": [{"texto": "Fila 1", "orden": 1}, ...], (Solo para matriz)
+    #   "columnas": [{"texto": "Col 1", "orden": 1}, ...], (Solo para matriz)
+    #   "seleccion_multiple_matriz": bool (True = Checkbox, False = Radio)
+    # }
+    configuracion_json: Optional[Dict[str, Any]] = None
     activo: bool = True
 
 class PreguntaCrear(PreguntaBase):
