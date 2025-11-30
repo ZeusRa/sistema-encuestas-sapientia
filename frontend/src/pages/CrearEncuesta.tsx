@@ -143,7 +143,7 @@ const CrearEncuesta = () => {
                 mensaje_error: p.configuracion_json?.mensaje_error || '',
                 descripcion: p.configuracion_json?.descripcion || '',
                 // Mapeo inverso de matriz si existe
-                columnas_matriz: p.configuracion_json?.columnas?.map((c:any) => c.texto) || [],
+                columnas_matriz: p.configuracion_json?.columnas?.map((c: any) => c.texto) || [],
                 // Si es matriz, las filas suelen guardarse en config o en opciones, aquí asumimos opciones
                 opciones: p.opciones.map((o: any) => ({
                     texto_opcion: o.texto_opcion,
@@ -218,16 +218,16 @@ const CrearEncuesta = () => {
 
     const borrarPregunta = (id_temporal: number | string) => {
         if (!esEditable) return;
-            const id = typeof id_temporal === 'string' ? Number(id_temporal) : id_temporal;
+        const id = typeof id_temporal === 'string' ? Number(id_temporal) : id_temporal;
         if (isNaN(id)) {
             console.error("ID inválido para borrar:", id_temporal);
-        return;
-    }
+            return;
+        }
         if (window.confirm("¿Estás seguro de borrar este elemento?")) {
-        const nuevas = preguntas.filter(p => p.id_temporal !== id);
-        const reordenadas = nuevas.map((p, index) => ({ ...p, orden: index + 1 }));
-        setPreguntas(reordenadas);
-    }
+            const nuevas = preguntas.filter(p => p.id_temporal !== id);
+            const reordenadas = nuevas.map((p, index) => ({ ...p, orden: index + 1 }));
+            setPreguntas(reordenadas);
+        }
     };
 
     // Manejador de Drag & Drop
@@ -244,7 +244,7 @@ const CrearEncuesta = () => {
     };
 
     // Acción: Guardar Global (Manual o Auto)
-    const onGuardar = async (data: FormularioEncuesta, silencioso = false) => {
+    const guardarEncuesta = async (data: FormularioEncuesta, silencioso = false) => {
         if (!silencioso) setErrorValidacion(false);
 
         // Validaciones de Fecha
@@ -323,13 +323,17 @@ const CrearEncuesta = () => {
         }
     };
 
+    const onSubmit = (data: FormularioEncuesta) => {
+        return guardarEncuesta(data, false);
+    };
+
     // Auto-save Effect
     // Escuchamos cambios en 'preguntas' y valores del formulario
     const values = watch();
     useEffect(() => {
         if (!esNuevo && idEncuesta) { // Solo auto-guardar si ya existe
             const timer = setTimeout(() => {
-                onGuardar(values, true);
+                guardarEncuesta(values, true);
             }, 2000); // 2 segundos de debounce
             return () => clearTimeout(timer);
         }
@@ -401,7 +405,7 @@ const CrearEncuesta = () => {
                     <Box display="flex" gap={1}>
                         {esEditable && (
                             <Tooltip title="Guardar de forma manual">
-                                <IconButton size="small" onClick={handleSubmit(onGuardar, onError)} color="primary"><CloudUploadIcon /></IconButton>
+                                <IconButton size="small" onClick={handleSubmit(onSubmit, onError)} color="primary"><CloudUploadIcon /></IconButton>
                             </Tooltip>
                         )}
                         <Tooltip title="Descartar cambios"><IconButton size="small" onClick={onDescartar} color="error"><CloseIcon /></IconButton></Tooltip>
@@ -427,7 +431,7 @@ const CrearEncuesta = () => {
 
             {/* 3. FORMULARIO PRINCIPAL */}
             <Paper sx={{ p: 4, flexGrow: 1, borderRadius: 2 }}>
-                <form onSubmit={handleSubmit(onGuardar, onError)}>
+                <form onSubmit={handleSubmit(onSubmit, onError)}>
                     <Grid container spacing={4}>
 
                         {/* Título Gigante (Input transparente) */}
