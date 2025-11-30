@@ -59,6 +59,67 @@ class UsuarioAdmin(Base):
     clave_encriptada = Column(String(255), nullable=False)
     rol = Column(Enum(RolAdmin, schema="encuestas_oltp"), nullable=False)
     fecha_creacion = Column(DateTime, nullable=False)
+    fecha_ultimo_login = Column(DateTime, nullable=True)
+    activo = Column(Boolean, default=True, nullable=False)
+    debe_cambiar_clave = Column(Boolean, default=False, nullable=False)
+
+    permisos_especificos = relationship("UsuarioPermiso", back_populates="usuario", cascade="all, delete-orphan")
+
+class Permiso(Base):
+    __tablename__ = "permiso"
+    __table_args__ = {"schema": "encuestas_oltp"}
+
+    id_permiso = Column(Integer, primary_key=True)
+    codigo = Column(String(50), unique=True, nullable=False)
+    nombre = Column(String(100), nullable=False)
+    descripcion = Column(Text, nullable=True)
+    categoria = Column(String(30), nullable=False)
+
+    asignaciones_rol = relationship("RolPermiso", back_populates="permiso", cascade="all, delete-orphan")
+    asignaciones_usuario = relationship("UsuarioPermiso", back_populates="permiso", cascade="all, delete-orphan")
+
+class RolPermiso(Base):
+    __tablename__ = "rol_permiso"
+    __table_args__ = {"schema": "encuestas_oltp"}
+
+    # id_rol es un ENUM en la BD, no una FK a una tabla de roles.
+    id_rol = Column(Enum(RolAdmin, schema="encuestas_oltp"), primary_key=True)
+    id_permiso = Column(Integer, ForeignKey("encuestas_oltp.permiso.id_permiso"), primary_key=True)
+
+    permiso = relationship("Permiso", back_populates="asignaciones_rol")
+
+class UsuarioPermiso(Base):
+    __tablename__ = "usuario_permiso"
+    __table_args__ = {"schema": "encuestas_oltp"}
+
+    id_usuario = Column(Integer, ForeignKey("encuestas_oltp.usuario_admin.id_admin"), primary_key=True)
+    id_permiso = Column(Integer, ForeignKey("encuestas_oltp.permiso.id_permiso"), primary_key=True)
+    tiene = Column(Boolean, default=True, nullable=False)
+
+    usuario = relationship("UsuarioAdmin", back_populates="permisos_especificos")
+    permiso = relationship("Permiso", back_populates="asignaciones_usuario")
+
+class PlantillaOpciones(Base):
+    __tablename__ = "plantilla_opciones"
+    __table_args__ = {"schema": "encuestas_oltp"}
+
+    id = Column(Integer, primary_key=True)
+    nombre = Column(String(100), nullable=False)
+    descripcion = Column(Text, nullable=True)
+    fecha_creacion = Column(DateTime, server_default=func.now())
+
+    detalles = relationship("PlantillaOpcionDetalle", back_populates="plantilla", cascade="all, delete-orphan")
+
+class PlantillaOpcionDetalle(Base):
+    __tablename__ = "plantilla_opcion_detalle"
+    __table_args__ = {"schema": "encuestas_oltp"}
+
+    id = Column(Integer, primary_key=True)
+    id_plantilla = Column(Integer, ForeignKey("encuestas_oltp.plantilla_opciones.id"), nullable=False)
+    texto_opcion = Column(String(255), nullable=False)
+    orden = Column(Integer, nullable=False)
+
+    plantilla = relationship("PlantillaOpciones", back_populates="detalles")
 
 class Encuesta(Base):
     __tablename__ = "encuesta"
