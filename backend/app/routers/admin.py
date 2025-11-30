@@ -269,6 +269,112 @@ def publicar_encuesta(
     bd.refresh(encuesta)
     return encuesta
 
+@router.post("/encuestas/{encuesta_id}/duplicar", response_model=schemas.EncuestaSalida, status_code=status.HTTP_201_CREATED)
+def duplicar_encuesta(
+    encuesta_id: int,
+    bd: Session = Depends(obtener_bd),
+    usuario_actual: modelos.UsuarioAdmin = Depends(solo_administradores)
+):
+    """
+    Duplica una encuesta existente, copiando todas sus configuraciones y preguntas.
+    La nueva encuesta se crea en estado 'borrador'.
+    """
+    # 1. Obtener la encuesta original con todas sus relaciones
+    encuesta_original = (
+        bd.query(modelos.Encuesta)
+        .options(
+            joinedload(modelos.Encuesta.reglas),
+            joinedload(modelos.Encuesta.preguntas)
+                .joinedload(modelos.Pregunta.opciones)
+        )
+        .filter(modelos.Encuesta.id == encuesta_id)
+        .first()
+    )
+
+    if not encuesta_original:
+        raise HTTPException(status_code=404, detail="Encuesta no encontrada")
+
+    # 2. Crear el clon de la encuesta
+    nueva_encuesta = modelos.Encuesta(
+        nombre=f"{encuesta_original.nombre} - (copia)",
+        descripcion=encuesta_original.descripcion,
+        mensaje_final=encuesta_original.mensaje_final,
+        fecha_inicio=encuesta_original.fecha_inicio,
+        fecha_fin=encuesta_original.fecha_fin,
+        prioridad=encuesta_original.prioridad,
+        acciones_disparadoras=list(encuesta_original.acciones_disparadoras), # Copia de lista
+        configuracion=dict(encuesta_original.configuracion), # Copia de dict
+        estado=modelos.EstadoEncuesta.borrador,
+        activo=True, # Por defecto activa al duplicar
+        usuario_creacion=usuario_actual.id_admin
+    )
+
+    bd.add(nueva_encuesta)
+    bd.flush() # Obtener ID nuevo
+
+    # 3. Clonar Reglas
+    for regla in encuesta_original.reglas:
+        nueva_regla = modelos.ReglaAsignacion(
+            id_encuesta=nueva_encuesta.id,
+            id_facultad=regla.id_facultad,
+            id_carrera=regla.id_carrera,
+            id_asignatura=regla.id_asignatura,
+            publico_objetivo=regla.publico_objetivo
+        )
+        bd.add(nueva_regla)
+
+    # 4. Clonar Preguntas y Opciones
+    for preg in encuesta_original.preguntas:
+        # Usamos el helper existente pero mapeando manualmente ya que no recibimos schema
+        nueva_pregunta = modelos.Pregunta(
+            id_encuesta=nueva_encuesta.id,
+            texto_pregunta=preg.texto_pregunta,
+            orden=preg.orden,
+            tipo=preg.tipo,
+            configuracion_json=dict(preg.configuracion_json) if preg.configuracion_json else None,
+            activo=preg.activo
+        )
+        bd.add(nueva_pregunta)
+        bd.flush()
+
+        for opc in preg.opciones:
+            nueva_opcion = modelos.OpcionRespuesta(
+                id_pregunta=nueva_pregunta.id,
+                texto_opcion=opc.texto_opcion,
+                orden=opc.orden
+            )
+            bd.add(nueva_opcion)
+
+    bd.commit()
+
+    # 5. Retornar la nueva encuesta completa
+    bd.refresh(nueva_encuesta)
+    return nueva_encuesta
+
+@router.delete("/encuestas/{encuesta_id}", status_code=status.HTTP_204_NO_CONTENT)
+def eliminar_encuesta(
+    encuesta_id: int,
+    bd: Session = Depends(obtener_bd),
+    usuario_actual: modelos.UsuarioAdmin = Depends(solo_administradores)
+):
+    """
+    Elimina una encuesta. Solo permitido si está en estado 'borrador'.
+    """
+    encuesta = bd.query(modelos.Encuesta).filter(modelos.Encuesta.id == encuesta_id).first()
+
+    if not encuesta:
+        raise HTTPException(status_code=404, detail="Encuesta no encontrada")
+
+    if encuesta.estado != modelos.EstadoEncuesta.borrador:
+        raise HTTPException(
+            status_code=400,
+            detail="No se puede eliminar una encuesta que no esté en borrador (tiene histórico o está activa)."
+        )
+
+    bd.delete(encuesta)
+    bd.commit()
+    return None
+
 
 @router.post("/encuestas/{encuesta_id}/finalizar", response_model=schemas.EncuestaSalida)
 def finalizar_encuesta(

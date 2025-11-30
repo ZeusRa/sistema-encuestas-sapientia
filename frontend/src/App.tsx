@@ -11,6 +11,11 @@ import LayoutDashboard from "./layout/LayoutDashboard";
 import RutaProtegida from "./components/RutaProtegida";
 import Encuestas from "./pages/Encuestas";
 import CrearEncuesta from "./pages/CrearEncuesta";
+import CambiarClave from "./pages/CambiarClave";
+import GestionUsuarios from "./pages/admin/Usuarios";
+import GestionPermisos from "./pages/admin/GestionPermisos";
+import VistaPreviaEncuesta from "./pages/VistaPreviaEncuesta";
+import Plantillas from "./pages/Plantillas";
 
 function App() {
   return (
@@ -23,6 +28,11 @@ function App() {
           {/* Ruta pública */}
           <Route path="/login" element={<Login />} />
 
+          {/* Ruta de Vista Previa (Accesible sin layout de dashboard, pero protegida) */}
+          <Route element={<RutaProtegida />}>
+             <Route path="/encuestas/prueba/:id" element={<VistaPreviaEncuesta />} />
+          </Route>
+
           {/* Rutas Protegidas */}
           <Route element={<RutaProtegida />}>
             <Route element={<LayoutDashboard />}>
@@ -32,6 +42,14 @@ function App() {
               {/* Rutas de Encuestas */}
               <Route path="/encuestas" element={<Encuestas />} />
               <Route path="/encuestas/crear" element={<CrearEncuesta />} /> {/* Nueva Ruta */}
+              <Route path="/encuestas/plantillas" element={<Plantillas />} />
+
+              {/* Ruta de Cambio de Clave */}
+              <Route path="/cambiar-clave" element={<CambiarClave />} />
+
+              {/* Rutas de Administración */}
+              <Route path="/admin/usuarios" element={<GestionUsuarios />} />
+              <Route path="/admin/permisos" element={<GestionPermisos />} />
               
             </Route>
           </Route>
