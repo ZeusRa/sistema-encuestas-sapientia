@@ -9,10 +9,10 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import DragHandleIcon from '@mui/icons-material/DragHandle';
-import { useForm, useFieldArray, Control } from 'react-hook-form';
+import { useForm, useFieldArray, type Control } from 'react-hook-form';
 import api from '../api/axios';
 import { toast } from 'react-toastify';
-import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
+import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 
 interface OpcionPlantilla {
     texto_opcion: string;
@@ -135,7 +135,7 @@ const Plantillas = () => {
                     <TableBody>
                         {plantillas.map((p) => (
                             <TableRow key={p.id}>
-                                <TableCell fontWeight="bold">{p.nombre}</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold' }}>{p.nombre}</TableCell>
                                 <TableCell>{p.descripcion}</TableCell>
                                 <TableCell align="center">{p.detalles.length}</TableCell>
                                 <TableCell align="center">

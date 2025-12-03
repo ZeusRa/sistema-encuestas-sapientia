@@ -18,11 +18,12 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ViewHeadlineIcon from '@mui/icons-material/ViewHeadline';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, Controller, type SubmitHandler } from 'react-hook-form';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api/axios';
 import { toast } from 'react-toastify';
 import { usarAuthStore } from '../context/authStore';
+import { useDebounce } from '../hooks/useDebounce'; // Asegurarse de tener este hook o implementarlo
 
 import ModalPregunta, { type PreguntaFrontend } from '../components/ModalPregunta';
 
@@ -217,16 +218,16 @@ const CrearEncuesta = () => {
 
     const borrarPregunta = (id_temporal: number | string) => {
         if (!esEditable) return;
-            const id = typeof id_temporal === 'string' ? Number(id_temporal) : id_temporal;
+        const id = typeof id_temporal === 'string' ? Number(id_temporal) : id_temporal;
         if (isNaN(id)) {
             console.error("ID inválido para borrar:", id_temporal);
-        return;
-    }
+            return;
+        }
         if (window.confirm("¿Estás seguro de borrar este elemento?")) {
-        const nuevas = preguntas.filter(p => p.id_temporal !== id);
-        const reordenadas = nuevas.map((p, index) => ({ ...p, orden: index + 1 }));
-        setPreguntas(reordenadas);
-    }
+            const nuevas = preguntas.filter(p => p.id_temporal !== id);
+            const reordenadas = nuevas.map((p, index) => ({ ...p, orden: index + 1 }));
+            setPreguntas(reordenadas);
+        }
     };
 
     // Manejador de Drag & Drop
@@ -243,14 +244,12 @@ const CrearEncuesta = () => {
     };
 
     // Acción: Guardar Global (Manual o Auto)
-    const onGuardar = async (data: FormularioEncuesta, silencioso = false) => {
+    const guardarEncuesta = async (data: FormularioEncuesta, silencioso = false) => {
         if (!silencioso) setErrorValidacion(false);
 
-        // Validaciones de Fecha
         const inicio = new Date(data.fecha_inicio);
         const fin = new Date(data.fecha_fin);
         const ahora = new Date();
-        // Margen de 1 minuto para evitar errores por milisegundos al crear
         ahora.setMinutes(ahora.getMinutes() - 1);
 
         if (esNuevo && inicio < ahora) {
@@ -265,7 +264,6 @@ const CrearEncuesta = () => {
         if (!silencioso) console.log("Guardando...", data);
 
         try {
-            // Mapeo al formato que espera el backend (schemas.EncuestaCrear)
             const payload = {
                 nombre: data.titulo,
                 fecha_inicio: new Date(data.fecha_inicio).toISOString(),
@@ -278,8 +276,6 @@ const CrearEncuesta = () => {
                 reglas: [{ publico_objetivo: data.publico_objetivo }],
                 descripcion: data.descripcion,
                 mensaje_final: data.mensaje_final,
-
-                // AQUÍ ENVIAMOS LAS PREGUNTAS CREADAS
                 preguntas: preguntas.map((p, index) => ({
                     texto_pregunta: p.texto_pregunta,
                     orden: index + 1,
@@ -307,7 +303,6 @@ const CrearEncuesta = () => {
                 setEsNuevo(false);
                 navigate(`/encuestas/crear?id=${res.data.id}`, { replace: true });
             } else {
-                // PUT: Actualización
                 const res = await api.put(`/admin/encuestas/${idEncuesta}`, payload);
                 if (!silencioso) toast.success("Encuesta actualizada exitosamente");
                 // Actualizar estado local con la respuesta para asegurar sincronía
@@ -400,7 +395,17 @@ const CrearEncuesta = () => {
                     <Box display="flex" gap={1}>
                         {esEditable && (
                             <Tooltip title="Guardar de forma manual">
-                                <IconButton size="small" onClick={handleSubmit(onGuardar, onError)} color="primary"><CloudUploadIcon /></IconButton>
+                                <IconButton
+                                    size="small"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleSubmit(onGuardar, onError)();
+                                    }}
+                                    color="primary"
+                                    disabled={cargandoDatos}
+                                >
+                                    <CloudUploadIcon />
+                                </IconButton>
                             </Tooltip>
                         )}
                         <Tooltip title="Descartar cambios"><IconButton size="small" onClick={onDescartar} color="error"><CloseIcon /></IconButton></Tooltip>

@@ -149,7 +149,7 @@ class ReglaAsignacionBase(EsquemaBase):
     publico_objetivo: PublicoObjetivo
 
 class ReglaAsignacionCrear(ReglaAsignacionBase):
-    filtros_avanzados: Optional[Dict[str, Any]] = None
+    filtros_json: Optional[Dict[str, Any]] = None
 
 class ReglaAsignacionSalida(ReglaAsignacionBase):
     id: int
