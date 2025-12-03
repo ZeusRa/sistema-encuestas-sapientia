@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict hSQaGl8JxKMbjNdxIRrCT3StUBNKlsHhU7p1hLK4c00Te9PBYISDmoHbuCoL7J6
+\restrict fxoHv5ovAMPtRMugd2Hddj0aZjdIpMA5HhsMHmm5dng32pcUtvjpgbKdgZD0uMc
 
 -- Dumped from database version 16.11
 -- Dumped by pg_dump version 16.11
@@ -368,8 +368,16 @@ CREATE TABLE encuestas_oltp.asignacion_usuario (
     estado encuestas_oltp.estado_asignacion DEFAULT 'pendiente'::encuestas_oltp.estado_asignacion,
     fecha_asignacion timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     fecha_realizacion timestamp without time zone,
-    id_referencia_contexto character varying(100)
+    id_referencia_contexto character varying(100),
+    metadatos_asignacion jsonb DEFAULT '{}'::jsonb
 );
+
+
+--
+-- Name: COLUMN asignacion_usuario.metadatos_asignacion; Type: COMMENT; Schema: encuestas_oltp; Owner: -
+--
+
+COMMENT ON COLUMN encuestas_oltp.asignacion_usuario.metadatos_asignacion IS 'Contexto extra (ej: nombre docente, materia) para mostrar en el frontend sin consultar a Sapientia';
 
 
 --
@@ -1335,5 +1343,5 @@ ALTER TABLE ONLY encuestas_oltp.usuario_permiso
 -- PostgreSQL database dump complete
 --
 
-\unrestrict hSQaGl8JxKMbjNdxIRrCT3StUBNKlsHhU7p1hLK4c00Te9PBYISDmoHbuCoL7J6
+\unrestrict fxoHv5ovAMPtRMugd2Hddj0aZjdIpMA5HhsMHmm5dng32pcUtvjpgbKdgZD0uMc
 

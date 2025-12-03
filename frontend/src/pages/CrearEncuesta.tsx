@@ -18,7 +18,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ViewHeadlineIcon from '@mui/icons-material/ViewHeadline';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, Controller, type SubmitHandler } from 'react-hook-form';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api/axios';
 import { toast } from 'react-toastify';
@@ -143,7 +143,7 @@ const CrearEncuesta = () => {
                 mensaje_error: p.configuracion_json?.mensaje_error || '',
                 descripcion: p.configuracion_json?.descripcion || '',
                 // Mapeo inverso de matriz si existe
-                columnas_matriz: p.configuracion_json?.columnas?.map((c:any) => c.texto) || [],
+                columnas_matriz: p.configuracion_json?.columnas?.map((c: any) => c.texto) || [],
                 // Si es matriz, las filas suelen guardarse en config o en opciones, aquí asumimos opciones
                 opciones: p.opciones.map((o: any) => ({
                     texto_opcion: o.texto_opcion,
@@ -247,11 +247,9 @@ const CrearEncuesta = () => {
     const guardarEncuesta = async (data: FormularioEncuesta, silencioso = false) => {
         if (!silencioso) setErrorValidacion(false);
 
-        // Validaciones de Fecha
         const inicio = new Date(data.fecha_inicio);
         const fin = new Date(data.fecha_fin);
         const ahora = new Date();
-        // Margen de 1 minuto para evitar errores por milisegundos al crear
         ahora.setMinutes(ahora.getMinutes() - 1);
 
         if (esNuevo && inicio < ahora) {
@@ -263,14 +261,11 @@ const CrearEncuesta = () => {
             return;
         }
 
-        if (!silencioso) console.log("Guardando...", data);
-
         try {
-            // Mapeo al formato que espera el backend (schemas.EncuestaCrear)
             const payload = {
                 nombre: data.titulo,
-                fecha_inicio: new Date(data.fecha_inicio).toISOString(),
-                fecha_fin: new Date(data.fecha_fin).toISOString(),
+                fecha_inicio: inicio.toISOString(),
+                fecha_fin: fin.toISOString(),
                 prioridad: data.prioridad,
                 acciones_disparadoras: data.acciones_disparadoras,
                 configuracion: data.configuracion,
@@ -279,8 +274,6 @@ const CrearEncuesta = () => {
                 reglas: [{ publico_objetivo: data.publico_objetivo }],
                 descripcion: data.descripcion,
                 mensaje_final: data.mensaje_final,
-
-                // AQUÍ ENVIAMOS LAS PREGUNTAS CREADAS
                 preguntas: preguntas.map((p, index) => ({
                     texto_pregunta: p.texto_pregunta,
                     orden: index + 1,
@@ -289,9 +282,8 @@ const CrearEncuesta = () => {
                         obligatoria: p.obligatoria,
                         mensaje_error: p.mensaje_error,
                         descripcion: p.descripcion,
-                        // Mapeo de campos extra de matriz
-                        filas: p.filas, // Si existen
-                        columnas: p.columnas, // Si existen
+                        filas: p.filas,
+                        columnas: p.columnas,
                         seleccion_multiple_matriz: p.seleccion_multiple_matriz
                     },
                     activo: true,
@@ -308,10 +300,8 @@ const CrearEncuesta = () => {
                 setEsNuevo(false);
                 navigate(`/encuestas/crear?id=${res.data.id}`, { replace: true });
             } else {
-                // PUT: Actualización
                 const res = await api.put(`/admin/encuestas/${idEncuesta}`, payload);
                 if (!silencioso) toast.success("Encuesta actualizada exitosamente");
-                // Actualizar estado local con la respuesta para asegurar sincronía
                 setEstado(res.data.estado);
             }
         } catch (error: any) {
@@ -321,6 +311,10 @@ const CrearEncuesta = () => {
                 toast.error(msj);
             }
         }
+    };
+
+    const onGuardar: SubmitHandler<FormularioEncuesta> = async (data) => {
+        await guardarEncuesta(data, false); // modo manual → no silencioso
     };
 
     // Auto-save Effect
@@ -401,7 +395,17 @@ const CrearEncuesta = () => {
                     <Box display="flex" gap={1}>
                         {esEditable && (
                             <Tooltip title="Guardar de forma manual">
-                                <IconButton size="small" onClick={handleSubmit(onSubmit, onError)} color="primary"><CloudUploadIcon /></IconButton>
+                                <IconButton
+                                    size="small"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleSubmit(onGuardar, onError)();
+                                    }}
+                                    color="primary"
+                                    disabled={cargandoDatos}
+                                >
+                                    <CloudUploadIcon />
+                                </IconButton>
                             </Tooltip>
                         )}
                         <Tooltip title="Descartar cambios"><IconButton size="small" onClick={onDescartar} color="error"><CloseIcon /></IconButton></Tooltip>
@@ -427,7 +431,7 @@ const CrearEncuesta = () => {
 
             {/* 3. FORMULARIO PRINCIPAL */}
             <Paper sx={{ p: 4, flexGrow: 1, borderRadius: 2 }}>
-                <form onSubmit={handleSubmit(onSubmit, onError)}>
+                <form onSubmit={handleSubmit(onGuardar, onError)}>
                     <Grid container spacing={4}>
 
                         {/* Título Gigante (Input transparente) */}
