@@ -194,7 +194,7 @@ class ReglaAsignacion(Base):
     id_carrera = Column(Integer, nullable=True)
     id_asignatura = Column(Integer, nullable=True)
     publico_objetivo = Column(Enum(PublicoObjetivo, schema="encuestas_oltp"), nullable=False)
-    filtros_avanzados = Column(JSONB, nullable=True)
+    filtros_json = Column(JSONB, name="filtros_json", nullable=True, server_default="{}")
 
     encuesta = relationship("Encuesta", back_populates="reglas")
 
