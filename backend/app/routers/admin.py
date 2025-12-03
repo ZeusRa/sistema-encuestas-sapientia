@@ -252,7 +252,7 @@ def publicar_encuesta(
     usuario: modelos.UsuarioAdmin = Depends(solo_administradores)
 ):
     """
-    Cambia el estado de BORRADOR a EN_CURSO.
+    Cambia el estado de BORRADOR a EN_CURSO y genera asignaciones JIT si corresponde.
     """
     encuesta = bd.query(modelos.Encuesta).filter(modelos.Encuesta.id == encuesta_id).first()
     if not encuesta:
@@ -261,6 +261,11 @@ def publicar_encuesta(
     if encuesta.estado != modelos.EstadoEncuesta.borrador:
         raise HTTPException(status_code=400, detail="Solo se pueden publicar encuestas en estado BORRADOR")
 
+    # --- LÓGICA DE SIMULACIÓN JIT (FASE 3) ---
+    # Si la encuesta es de evaluación docente o tiene cierta configuración, simulamos asignación masiva
+    if encuesta.prioridad == modelos.PrioridadEncuesta.evaluacion_docente:
+        simular_asignacion_jit(bd, encuesta.id)
+
     encuesta.estado = modelos.EstadoEncuesta.en_curso
     # ✅ Registrar quién publicó (como modificación)
     encuesta.usuario_modificacion = usuario.id_admin
@@ -268,6 +273,150 @@ def publicar_encuesta(
     bd.commit()
     bd.refresh(encuesta)
     return encuesta
+
+def simular_asignacion_jit(bd: Session, id_encuesta: int):
+    """
+    Simula la obtención de datos de Sapientia y crea asignaciones masivas con contexto.
+    """
+    # 1. Datos simulados (Alumno - Materia - Docente)
+    datos_jit = [
+        {"id_usuario": 1, "materia": "Física I", "docente": "Juan Perez", "cod_materia": "FIS101", "id_docente": 101},
+        {"id_usuario": 1, "materia": "Cálculo I", "docente": "Maria Gomez", "cod_materia": "CAL101", "id_docente": 102},
+        {"id_usuario": 2, "materia": "Física I", "docente": "Juan Perez", "cod_materia": "FIS101", "id_docente": 101},
+        # Agrega más datos ficticios según necesidad
+    ]
+
+    for dato in datos_jit:
+        # Generar ID de contexto único
+        id_contexto = f"{dato['cod_materia']}-{dato['id_docente']}"
+
+        # Verificar si ya existe (idempotencia)
+        existe = bd.query(modelos.AsignacionUsuario).filter(
+            modelos.AsignacionUsuario.id_usuario == dato['id_usuario'],
+            modelos.AsignacionUsuario.id_encuesta == id_encuesta,
+            modelos.AsignacionUsuario.id_referencia_contexto == id_contexto
+        ).first()
+
+        if not existe:
+            nueva_asignacion = modelos.AsignacionUsuario(
+                id_usuario=dato['id_usuario'],
+                id_encuesta=id_encuesta,
+                id_referencia_contexto=id_contexto,
+                metadatos_asignacion={
+                    "nombre_materia": dato['materia'],
+                    "docente": dato['docente']
+                },
+                estado=modelos.EstadoAsignacion.pendiente
+            )
+            bd.add(nueva_asignacion)
+
+    bd.flush() # Asegurar IDs antes de commit final en la función padre
+
+@router.post("/encuestas/{encuesta_id}/duplicar", response_model=schemas.EncuestaSalida, status_code=status.HTTP_201_CREATED)
+def duplicar_encuesta(
+    encuesta_id: int,
+    bd: Session = Depends(obtener_bd),
+    usuario_actual: modelos.UsuarioAdmin = Depends(solo_administradores)
+):
+    """
+    Duplica una encuesta existente, copiando todas sus configuraciones y preguntas.
+    La nueva encuesta se crea en estado 'borrador'.
+    """
+    # 1. Obtener la encuesta original con todas sus relaciones
+    encuesta_original = (
+        bd.query(modelos.Encuesta)
+        .options(
+            joinedload(modelos.Encuesta.reglas),
+            joinedload(modelos.Encuesta.preguntas)
+                .joinedload(modelos.Pregunta.opciones)
+        )
+        .filter(modelos.Encuesta.id == encuesta_id)
+        .first()
+    )
+
+    if not encuesta_original:
+        raise HTTPException(status_code=404, detail="Encuesta no encontrada")
+
+    # 2. Crear el clon de la encuesta
+    nueva_encuesta = modelos.Encuesta(
+        nombre=f"{encuesta_original.nombre} - (copia)",
+        descripcion=encuesta_original.descripcion,
+        mensaje_final=encuesta_original.mensaje_final,
+        fecha_inicio=encuesta_original.fecha_inicio,
+        fecha_fin=encuesta_original.fecha_fin,
+        prioridad=encuesta_original.prioridad,
+        acciones_disparadoras=list(encuesta_original.acciones_disparadoras), # Copia de lista
+        configuracion=dict(encuesta_original.configuracion), # Copia de dict
+        estado=modelos.EstadoEncuesta.borrador,
+        activo=True, # Por defecto activa al duplicar
+        usuario_creacion=usuario_actual.id_admin
+    )
+
+    bd.add(nueva_encuesta)
+    bd.flush() # Obtener ID nuevo
+
+    # 3. Clonar Reglas
+    for regla in encuesta_original.reglas:
+        nueva_regla = modelos.ReglaAsignacion(
+            id_encuesta=nueva_encuesta.id,
+            id_facultad=regla.id_facultad,
+            id_carrera=regla.id_carrera,
+            id_asignatura=regla.id_asignatura,
+            publico_objetivo=regla.publico_objetivo
+        )
+        bd.add(nueva_regla)
+
+    # 4. Clonar Preguntas y Opciones
+    for preg in encuesta_original.preguntas:
+        # Usamos el helper existente pero mapeando manualmente ya que no recibimos schema
+        nueva_pregunta = modelos.Pregunta(
+            id_encuesta=nueva_encuesta.id,
+            texto_pregunta=preg.texto_pregunta,
+            orden=preg.orden,
+            tipo=preg.tipo,
+            configuracion_json=dict(preg.configuracion_json) if preg.configuracion_json else None,
+            activo=preg.activo
+        )
+        bd.add(nueva_pregunta)
+        bd.flush()
+
+        for opc in preg.opciones:
+            nueva_opcion = modelos.OpcionRespuesta(
+                id_pregunta=nueva_pregunta.id,
+                texto_opcion=opc.texto_opcion,
+                orden=opc.orden
+            )
+            bd.add(nueva_opcion)
+
+    bd.commit()
+
+    # 5. Retornar la nueva encuesta completa
+    bd.refresh(nueva_encuesta)
+    return nueva_encuesta
+
+@router.delete("/encuestas/{encuesta_id}", status_code=status.HTTP_204_NO_CONTENT)
+def eliminar_encuesta(
+    encuesta_id: int,
+    bd: Session = Depends(obtener_bd),
+    usuario_actual: modelos.UsuarioAdmin = Depends(solo_administradores)
+):
+    """
+    Elimina una encuesta. Solo permitido si está en estado 'borrador'.
+    """
+    encuesta = bd.query(modelos.Encuesta).filter(modelos.Encuesta.id == encuesta_id).first()
+
+    if not encuesta:
+        raise HTTPException(status_code=404, detail="Encuesta no encontrada")
+
+    if encuesta.estado != modelos.EstadoEncuesta.borrador:
+        raise HTTPException(
+            status_code=400,
+            detail="No se puede eliminar una encuesta que no esté en borrador (tiene histórico o está activa)."
+        )
+
+    bd.delete(encuesta)
+    bd.commit()
+    return None
 
 
 @router.post("/encuestas/{encuesta_id}/finalizar", response_model=schemas.EncuestaSalida)

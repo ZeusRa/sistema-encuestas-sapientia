@@ -23,11 +23,20 @@ class UsuarioAdminBase(EsquemaBase):
     rol: RolAdmin
 
 class UsuarioAdminCrear(UsuarioAdminBase):
-    clave: str # Se recibe en texto plano, se encripta en el backend
+    clave: Optional[str] = None # Opcional: si no se envía, se genera una genérica
 
 class UsuarioAdminSalida(UsuarioAdminBase):
     id_admin: int
     fecha_creacion: datetime
+    fecha_ultimo_login: Optional[datetime] = None
+    activo: bool
+    debe_cambiar_clave: bool
+
+class UsuarioActualizarEstado(BaseModel):
+    activo: bool
+
+class UsuarioActualizarRol(BaseModel):
+    rol: RolAdmin
 
 # Esquemas para el Login (JWT)
 class SolicitudLogin(BaseModel):
@@ -41,6 +50,56 @@ class Token(BaseModel):
 class DatosToken(BaseModel):
     nombre_usuario: Optional[str] = None
     rol: Optional[str] = None
+
+class CambioClave(BaseModel):
+    clave_actual: str
+    clave_nueva: str
+    confirmacion_clave_nueva: str
+
+    @property
+    def claves_coinciden(self) -> bool:
+        return self.clave_nueva == self.confirmacion_clave_nueva
+
+class PermisoSalida(EsquemaBase):
+    id_permiso: int
+    codigo: str
+    nombre: str
+    descripcion: Optional[str] = None
+    categoria: str
+
+class AsignacionPermisoUsuario(BaseModel):
+    id_permiso: int
+    tiene: bool # True para otorgar, False para denegar explícitamente
+
+class AsignacionPermisoRol(BaseModel):
+    id_permisos: List[int] # Lista de IDs de permisos a asignar al rol
+
+# =============================================================================
+# PLANTILLAS DE OPCIONES
+# =============================================================================
+
+class PlantillaOpcionDetalleBase(EsquemaBase):
+    texto_opcion: str
+    orden: int
+
+class PlantillaOpcionDetalleCrear(PlantillaOpcionDetalleBase):
+    pass
+
+class PlantillaOpcionDetalleSalida(PlantillaOpcionDetalleBase):
+    id: int
+    id_plantilla: int
+
+class PlantillaOpcionesBase(EsquemaBase):
+    nombre: str
+    descripcion: Optional[str] = None
+
+class PlantillaOpcionesCrear(PlantillaOpcionesBase):
+    detalles: List[PlantillaOpcionDetalleCrear] = []
+
+class PlantillaOpcionesSalida(PlantillaOpcionesBase):
+    id: int
+    fecha_creacion: datetime
+    detalles: List[PlantillaOpcionDetalleSalida] = []
 
 # =============================================================================
 # GESTIÓN DE ENCUESTAS (Configuración)
@@ -63,7 +122,14 @@ class PreguntaBase(EsquemaBase):
     texto_pregunta: str
     orden: int
     tipo: TipoPregunta
-    configuracion_json: Optional[Dict[str, Any]] = None # Ej: {"max_opciones": 3}
+    # Configuración extendida para soportar matrices:
+    # {
+    #   "obligatoria": bool,
+    #   "filas": [{"texto": "Fila 1", "orden": 1}, ...], (Solo para matriz)
+    #   "columnas": [{"texto": "Col 1", "orden": 1}, ...], (Solo para matriz)
+    #   "seleccion_multiple_matriz": bool (True = Checkbox, False = Radio)
+    # }
+    configuracion_json: Optional[Dict[str, Any]] = None
     activo: bool = True
 
 class PreguntaCrear(PreguntaBase):
@@ -83,7 +149,7 @@ class ReglaAsignacionBase(EsquemaBase):
     publico_objetivo: PublicoObjetivo
 
 class ReglaAsignacionCrear(ReglaAsignacionBase):
-    pass
+    filtros_avanzados: Optional[Dict[str, Any]] = None
 
 class ReglaAsignacionSalida(ReglaAsignacionBase):
     id: int
@@ -150,6 +216,7 @@ class RespuestaIndividual(BaseModel):
 class EnvioRespuestasAlumno(BaseModel):
     id_usuario: int
     id_encuesta: int
+    id_referencia_contexto: str # Obligatorio para JIT
     metadatos_contexto: Dict[str, Any] # JSON para el OLAP (Facultad, Carrera, etc.)
     respuestas: List[RespuestaIndividual]
 
