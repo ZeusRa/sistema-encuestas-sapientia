@@ -143,7 +143,7 @@ const CrearEncuesta = () => {
                 mensaje_error: p.configuracion_json?.mensaje_error || '',
                 descripcion: p.configuracion_json?.descripcion || '',
                 // Mapeo inverso de matriz si existe
-                columnas_matriz: p.configuracion_json?.columnas?.map((c:any) => c.texto) || [],
+                columnas_matriz: p.configuracion_json?.columnas?.map((c: any) => c.texto) || [],
                 // Si es matriz, las filas suelen guardarse en config o en opciones, aquí asumimos opciones
                 opciones: p.opciones.map((o: any) => ({
                     texto_opcion: o.texto_opcion,
@@ -244,7 +244,7 @@ const CrearEncuesta = () => {
     };
 
     // Acción: Guardar Global (Manual o Auto)
-    const guardarEncuesta = async (data: FormularioEncuesta, silencioso = false) => {
+    const onGuardar = async (data: FormularioEncuesta, silencioso = false) => {
         if (!silencioso) setErrorValidacion(false);
 
         const inicio = new Date(data.fecha_inicio);
