@@ -11,7 +11,7 @@ import AddIcon from '@mui/icons-material/Add';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import DragHandleIcon from '@mui/icons-material/DragHandle';
 import api from '../api/axios';
-import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
+import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 
 // Tipos de datos (deben coincidir con el Backend)
 export type TipoPreguntaFrontend = 'texto_libre' | 'opcion_unica' | 'opcion_multiple' | 'matriz' | 'seccion';
