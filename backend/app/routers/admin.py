@@ -252,7 +252,7 @@ def publicar_encuesta(
     usuario: modelos.UsuarioAdmin = Depends(solo_administradores)
 ):
     """
-    Cambia el estado de BORRADOR a EN_CURSO.
+    Cambia el estado de BORRADOR a EN_CURSO y genera asignaciones JIT si corresponde.
     """
     encuesta = bd.query(modelos.Encuesta).filter(modelos.Encuesta.id == encuesta_id).first()
     if not encuesta:
@@ -261,6 +261,11 @@ def publicar_encuesta(
     if encuesta.estado != modelos.EstadoEncuesta.borrador:
         raise HTTPException(status_code=400, detail="Solo se pueden publicar encuestas en estado BORRADOR")
 
+    # --- LÓGICA DE SIMULACIÓN JIT (FASE 3) ---
+    # Si la encuesta es de evaluación docente o tiene cierta configuración, simulamos asignación masiva
+    if encuesta.prioridad == modelos.PrioridadEncuesta.evaluacion_docente:
+        simular_asignacion_jit(bd, encuesta.id)
+
     encuesta.estado = modelos.EstadoEncuesta.en_curso
     # ✅ Registrar quién publicó (como modificación)
     encuesta.usuario_modificacion = usuario.id_admin
@@ -268,6 +273,44 @@ def publicar_encuesta(
     bd.commit()
     bd.refresh(encuesta)
     return encuesta
+
+def simular_asignacion_jit(bd: Session, id_encuesta: int):
+    """
+    Simula la obtención de datos de Sapientia y crea asignaciones masivas con contexto.
+    """
+    # 1. Datos simulados (Alumno - Materia - Docente)
+    datos_jit = [
+        {"id_usuario": 1, "materia": "Física I", "docente": "Juan Perez", "cod_materia": "FIS101", "id_docente": 101},
+        {"id_usuario": 1, "materia": "Cálculo I", "docente": "Maria Gomez", "cod_materia": "CAL101", "id_docente": 102},
+        {"id_usuario": 2, "materia": "Física I", "docente": "Juan Perez", "cod_materia": "FIS101", "id_docente": 101},
+        # Agrega más datos ficticios según necesidad
+    ]
+
+    for dato in datos_jit:
+        # Generar ID de contexto único
+        id_contexto = f"{dato['cod_materia']}-{dato['id_docente']}"
+
+        # Verificar si ya existe (idempotencia)
+        existe = bd.query(modelos.AsignacionUsuario).filter(
+            modelos.AsignacionUsuario.id_usuario == dato['id_usuario'],
+            modelos.AsignacionUsuario.id_encuesta == id_encuesta,
+            modelos.AsignacionUsuario.id_referencia_contexto == id_contexto
+        ).first()
+
+        if not existe:
+            nueva_asignacion = modelos.AsignacionUsuario(
+                id_usuario=dato['id_usuario'],
+                id_encuesta=id_encuesta,
+                id_referencia_contexto=id_contexto,
+                metadatos_asignacion={
+                    "nombre_materia": dato['materia'],
+                    "docente": dato['docente']
+                },
+                estado=modelos.EstadoAsignacion.pendiente
+            )
+            bd.add(nueva_asignacion)
+
+    bd.flush() # Asegurar IDs antes de commit final en la función padre
 
 @router.post("/encuestas/{encuesta_id}/duplicar", response_model=schemas.EncuestaSalida, status_code=status.HTTP_201_CREATED)
 def duplicar_encuesta(

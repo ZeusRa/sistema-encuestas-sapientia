@@ -143,7 +143,7 @@ const CrearEncuesta = () => {
                 mensaje_error: p.configuracion_json?.mensaje_error || '',
                 descripcion: p.configuracion_json?.descripcion || '',
                 // Mapeo inverso de matriz si existe
-                columnas_matriz: p.configuracion_json?.columnas?.map((c: any) => c.texto) || [],
+                columnas_matriz: p.configuracion_json?.columnas?.map((c:any) => c.texto) || [],
                 // Si es matriz, las filas suelen guardarse en config o en opciones, aquí asumimos opciones
                 opciones: p.opciones.map((o: any) => ({
                     texto_opcion: o.texto_opcion,
@@ -261,11 +261,13 @@ const CrearEncuesta = () => {
             return;
         }
 
+        if (!silencioso) console.log("Guardando...", data);
+
         try {
             const payload = {
                 nombre: data.titulo,
-                fecha_inicio: inicio.toISOString(),
-                fecha_fin: fin.toISOString(),
+                fecha_inicio: new Date(data.fecha_inicio).toISOString(),
+                fecha_fin: new Date(data.fecha_fin).toISOString(),
                 prioridad: data.prioridad,
                 acciones_disparadoras: data.acciones_disparadoras,
                 configuracion: data.configuracion,
@@ -282,8 +284,9 @@ const CrearEncuesta = () => {
                         obligatoria: p.obligatoria,
                         mensaje_error: p.mensaje_error,
                         descripcion: p.descripcion,
-                        filas: p.filas,
-                        columnas: p.columnas,
+                        // Mapeo de campos extra de matriz
+                        filas: p.filas, // Si existen
+                        columnas: p.columnas, // Si existen
                         seleccion_multiple_matriz: p.seleccion_multiple_matriz
                     },
                     activo: true,
@@ -302,6 +305,7 @@ const CrearEncuesta = () => {
             } else {
                 const res = await api.put(`/admin/encuestas/${idEncuesta}`, payload);
                 if (!silencioso) toast.success("Encuesta actualizada exitosamente");
+                // Actualizar estado local con la respuesta para asegurar sincronía
                 setEstado(res.data.estado);
             }
         } catch (error: any) {
@@ -313,17 +317,13 @@ const CrearEncuesta = () => {
         }
     };
 
-    const onGuardar: SubmitHandler<FormularioEncuesta> = async (data) => {
-        await guardarEncuesta(data, false); // modo manual → no silencioso
-    };
-
     // Auto-save Effect
     // Escuchamos cambios en 'preguntas' y valores del formulario
     const values = watch();
     useEffect(() => {
         if (!esNuevo && idEncuesta) { // Solo auto-guardar si ya existe
             const timer = setTimeout(() => {
-                guardarEncuesta(values, true);
+                onGuardar(values, true);
             }, 2000); // 2 segundos de debounce
             return () => clearTimeout(timer);
         }
