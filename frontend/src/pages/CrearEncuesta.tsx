@@ -18,7 +18,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ViewHeadlineIcon from '@mui/icons-material/ViewHeadline';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import { useForm, Controller, type SubmitHandler } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api/axios';
 import { toast } from 'react-toastify';
@@ -143,7 +143,7 @@ const CrearEncuesta = () => {
                 mensaje_error: p.configuracion_json?.mensaje_error || '',
                 descripcion: p.configuracion_json?.descripcion || '',
                 // Mapeo inverso de matriz si existe
-                columnas_matriz: p.configuracion_json?.columnas?.map((c: any) => c.texto) || [],
+                columnas_matriz: p.configuracion_json?.columnas?.map((c:any) => c.texto) || [],
                 // Si es matriz, las filas suelen guardarse en config o en opciones, aquí asumimos opciones
                 opciones: p.opciones.map((o: any) => ({
                     texto_opcion: o.texto_opcion,
@@ -243,21 +243,23 @@ const CrearEncuesta = () => {
         setPreguntas(updatedItems);
     };
 
-    // Acción: Guardar Global (Manual o Auto)
-    const onGuardar = async (data: FormularioEncuesta, silencioso = false) => {
+    // Lógica de Guardado (Separada del handler)
+    const guardarDatos = async (data: FormularioEncuesta, silencioso = false) => {
         if (!silencioso) setErrorValidacion(false);
 
+        // Validaciones de Fecha
         const inicio = new Date(data.fecha_inicio);
         const fin = new Date(data.fecha_fin);
         const ahora = new Date();
+        // Margen de 1 minuto para evitar errores por milisegundos al crear
         ahora.setMinutes(ahora.getMinutes() - 1);
 
         if (esNuevo && inicio < ahora) {
-            toast.error("La fecha de inicio no puede ser anterior a la actual.");
+            if (!silencioso) toast.error("La fecha de inicio no puede ser anterior a la actual.");
             return;
         }
         if (fin <= inicio) {
-            toast.error("La fecha de fin debe ser posterior a la fecha de inicio.");
+            if (!silencioso) toast.error("La fecha de fin debe ser posterior a la fecha de inicio.");
             return;
         }
 
@@ -317,13 +319,18 @@ const CrearEncuesta = () => {
         }
     };
 
+    // Handler para Submit Manual (compatible con React Hook Form)
+    const handleSubmitGuardar = (data: FormularioEncuesta) => {
+        guardarDatos(data, false);
+    };
+
     // Auto-save Effect
     // Escuchamos cambios en 'preguntas' y valores del formulario
     const values = watch();
     useEffect(() => {
         if (!esNuevo && idEncuesta) { // Solo auto-guardar si ya existe
             const timer = setTimeout(() => {
-                onGuardar(values, true);
+                guardarDatos(values, true);
             }, 2000); // 2 segundos de debounce
             return () => clearTimeout(timer);
         }
@@ -395,17 +402,7 @@ const CrearEncuesta = () => {
                     <Box display="flex" gap={1}>
                         {esEditable && (
                             <Tooltip title="Guardar de forma manual">
-                                <IconButton
-                                    size="small"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleSubmit(onGuardar, onError)();
-                                    }}
-                                    color="primary"
-                                    disabled={cargandoDatos}
-                                >
-                                    <CloudUploadIcon />
-                                </IconButton>
+                            <IconButton size="small" onClick={handleSubmit(handleSubmitGuardar, onError)} color="primary"><CloudUploadIcon /></IconButton>
                             </Tooltip>
                         )}
                         <Tooltip title="Descartar cambios"><IconButton size="small" onClick={onDescartar} color="error"><CloseIcon /></IconButton></Tooltip>
@@ -431,7 +428,7 @@ const CrearEncuesta = () => {
 
             {/* 3. FORMULARIO PRINCIPAL */}
             <Paper sx={{ p: 4, flexGrow: 1, borderRadius: 2 }}>
-                <form onSubmit={handleSubmit(onGuardar, onError)}>
+                <form onSubmit={handleSubmit(handleSubmitGuardar, onError)}>
                     <Grid container spacing={4}>
 
                         {/* Título Gigante (Input transparente) */}
