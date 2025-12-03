@@ -143,7 +143,7 @@ const CrearEncuesta = () => {
                 mensaje_error: p.configuracion_json?.mensaje_error || '',
                 descripcion: p.configuracion_json?.descripcion || '',
                 // Mapeo inverso de matriz si existe
-                columnas_matriz: p.configuracion_json?.columnas?.map((c: any) => c.texto) || [],
+                columnas_matriz: p.configuracion_json?.columnas?.map((c:any) => c.texto) || [],
                 // Si es matriz, las filas suelen guardarse en config o en opciones, aquí asumimos opciones
                 opciones: p.opciones.map((o: any) => ({
                     texto_opcion: o.texto_opcion,
@@ -321,10 +321,6 @@ const CrearEncuesta = () => {
                 toast.error(msj);
             }
         }
-    };
-
-    const onSubmit = (data: FormularioEncuesta) => {
-        return guardarEncuesta(data, false);
     };
 
     // Auto-save Effect

@@ -149,7 +149,7 @@ class ReglaAsignacionBase(EsquemaBase):
     publico_objetivo: PublicoObjetivo
 
 class ReglaAsignacionCrear(ReglaAsignacionBase):
-    pass
+    filtros_avanzados: Optional[Dict[str, Any]] = None
 
 class ReglaAsignacionSalida(ReglaAsignacionBase):
     id: int
@@ -216,6 +216,7 @@ class RespuestaIndividual(BaseModel):
 class EnvioRespuestasAlumno(BaseModel):
     id_usuario: int
     id_encuesta: int
+    id_referencia_contexto: str # Obligatorio para JIT
     metadatos_contexto: Dict[str, Any] # JSON para el OLAP (Facultad, Carrera, etc.)
     respuestas: List[RespuestaIndividual]
 
