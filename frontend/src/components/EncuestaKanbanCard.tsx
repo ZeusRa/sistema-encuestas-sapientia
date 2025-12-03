@@ -5,6 +5,9 @@ import {
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import EditIcon from '@mui/icons-material/Edit';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import DeleteIcon from '@mui/icons-material/Delete';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 
 interface EncuestaData {
   id: number;
@@ -22,9 +25,14 @@ interface Props {
   onClick: (id: number) => void; // Clic general (ir a edición/lectura)
   onResultados: (id: number) => void; // Botón Resultados
   onEditar: (id: number) => void; // Opción de menú Editar
+
+  // Nuevas acciones
+  onDuplicar: (id: number) => void;
+  onEliminar: (id: number) => void;
+  onProbar: (id: number) => void;
 }
 
-const EncuestaKanbanCard = ({ data, onClick, onResultados, onEditar }: Props) => {
+const EncuestaKanbanCard = ({ data, onClick, onResultados, onEditar, onDuplicar, onEliminar, onProbar }: Props) => {
 
 
   // Estado para el menú de 3 puntos
@@ -37,10 +45,13 @@ const EncuestaKanbanCard = ({ data, onClick, onResultados, onEditar }: Props) =>
   const handleMenuClose = () => {
     setAnchorEl(null);
   };
-  const handleAccion = (accion: 'editar' | 'resultados') => {
+  const handleAccion = (accion: 'editar' | 'resultados' | 'duplicar' | 'eliminar' | 'probar') => {
     handleMenuClose();
     if (accion === 'editar') onEditar(data.id);
     if (accion === 'resultados') onResultados(data.id);
+    if (accion === 'duplicar') onDuplicar(data.id);
+    if (accion === 'eliminar') onEliminar(data.id);
+    if (accion === 'probar') onProbar(data.id);
   };
 
   // Formato de fecha 
@@ -90,13 +101,27 @@ const EncuestaKanbanCard = ({ data, onClick, onResultados, onEditar }: Props) =>
           onClose={handleMenuClose}
           onClick={(e) => e.stopPropagation()}
         >
+          <MenuItem onClick={() => handleAccion('probar')}>
+            <ListItemIcon><PlayArrowIcon fontSize="small" color="primary" /></ListItemIcon>
+            <ListItemText>Probar Encuesta</ListItemText>
+          </MenuItem>
+          <Divider />
           <MenuItem onClick={() => handleAccion('editar')}>
             <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
             <ListItemText>Editar Encuesta</ListItemText>
           </MenuItem>
+          <MenuItem onClick={() => handleAccion('duplicar')}>
+            <ListItemIcon><ContentCopyIcon fontSize="small" /></ListItemIcon>
+            <ListItemText>Duplicar</ListItemText>
+          </MenuItem>
           <MenuItem onClick={() => handleAccion('resultados')}>
             <ListItemIcon><AssessmentIcon fontSize="small" /></ListItemIcon>
             <ListItemText>Ver Resultados</ListItemText>
+          </MenuItem>
+          <Divider />
+          <MenuItem onClick={() => handleAccion('eliminar')} disabled={data.estado !== 'borrador'}>
+            <ListItemIcon><DeleteIcon fontSize="small" color={data.estado !== 'borrador' ? 'disabled' : 'error'} /></ListItemIcon>
+            <ListItemText sx={{ color: data.estado !== 'borrador' ? 'text.disabled' : 'error.main' }}>Eliminar</ListItemText>
           </MenuItem>
         </Menu>
 
