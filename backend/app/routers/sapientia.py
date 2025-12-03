@@ -86,9 +86,11 @@ def recibir_respuestas(
     CU07: Transacción Atómica (Guardar Respuestas + Desbloquear).
     """
     # 1. Buscar la asignación pendiente
+    # Modificación JIT: Filtramos también por id_referencia_contexto para cerrar solo la instancia correcta
     asignacion = bd.query(modelos.AsignacionUsuario).filter(
         modelos.AsignacionUsuario.id_usuario == envio.id_usuario,
         modelos.AsignacionUsuario.id_encuesta == envio.id_encuesta,
+        modelos.AsignacionUsuario.id_referencia_contexto == envio.id_referencia_contexto,
         modelos.AsignacionUsuario.estado == "pendiente"
     ).first()
 
@@ -98,13 +100,14 @@ def recibir_respuestas(
         asignacion_realizada = bd.query(modelos.AsignacionUsuario).filter(
              modelos.AsignacionUsuario.id_usuario == envio.id_usuario,
              modelos.AsignacionUsuario.id_encuesta == envio.id_encuesta,
+             modelos.AsignacionUsuario.id_referencia_contexto == envio.id_referencia_contexto,
              modelos.AsignacionUsuario.estado == "realizada"
         ).first()
         
         if asignacion_realizada:
              return {"mensaje": "Encuesta ya recibida previamente"}
              
-        raise HTTPException(status_code=404, detail="Asignación no encontrada o inválida")
+        raise HTTPException(status_code=404, detail="Asignación no encontrada o inválida para este contexto")
 
     try:
         # 2. INICIO TRANSACCIÓN
