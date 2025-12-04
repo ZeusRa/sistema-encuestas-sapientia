@@ -69,6 +69,32 @@ const Encuestas = () => {
   const irAEdicion = (id: number) => navigate(`/encuestas/crear?id=${id}`); // Modo edición (usaremos query param o ruta dinámica)
   const irAResultados = (id: number) => navigate(`/encuestas/resultados/${id}`); // Nueva ruta futura
 
+  // Acciones (Duplicar, Eliminar)
+  const handleDuplicar = async (id: number) => {
+      try {
+          const res = await api.post(`/admin/encuestas/${id}/duplicar`);
+          navigate(`/encuestas/crear?id=${res.data.id}`); // Ir a la copia
+      } catch (error) {
+          console.error("Error duplicando", error);
+      }
+  };
+
+  const handleEliminar = async (id: number) => {
+      if (!confirm("¿Estás seguro de eliminar esta encuesta?")) return;
+      try {
+          await api.delete(`/admin/encuestas/${id}`);
+          // Recargar lista
+          setEncuestas(prev => prev.filter(e => e.id !== id));
+      } catch (error) {
+          console.error("Error eliminando", error);
+          alert("No se puede eliminar la encuesta (probablemente no esté en borrador).");
+      }
+  };
+
+  const handleProbar = (id: number) => {
+      window.open(`/encuestas/prueba/${id}`, '_blank');
+  };
+
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
 
@@ -164,6 +190,10 @@ const Encuestas = () => {
                         onClick={irAEdicion}
                         onResultados={irAResultados}
                         onEditar={irAEdicion}
+                        // Nuevas props para acciones
+                        onDuplicar={() => handleDuplicar(encuesta.id)}
+                        onEliminar={() => handleEliminar(encuesta.id)}
+                        onProbar={() => handleProbar(encuesta.id)}
                       />
                     </Grid>
                   ))}

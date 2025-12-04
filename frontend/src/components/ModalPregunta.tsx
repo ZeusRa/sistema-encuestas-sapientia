@@ -3,11 +3,15 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button,
   TextField, Box, Typography, Grid, RadioGroup,
   FormControlLabel, Radio, Tabs, Tab, Checkbox,
-  IconButton, Paper, Tooltip
+  IconButton, Paper, Tooltip, Select, MenuItem, FormControl, InputLabel,
+  List, ListItem, ListItemIcon
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import DragHandleIcon from '@mui/icons-material/DragHandle';
+import api from '../api/axios';
+import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 
 // Tipos de datos (deben coincidir con el Backend)
 export type TipoPreguntaFrontend = 'texto_libre' | 'opcion_unica' | 'opcion_multiple' | 'matriz' | 'seccion';
@@ -27,7 +31,11 @@ export interface PreguntaFrontend {
   // Configuraciones extra (JSONB en backend)
   descripcion?: string;
   mensaje_error?: string;
-  columnas_matriz?: string[]; // Para tipo matriz
+  // Matriz
+  columnas_matriz?: string[]; // Legacy o alternativo
+  filas?: OpcionFrontend[];
+  columnas?: OpcionFrontend[];
+  seleccion_multiple_matriz?: boolean;
 }
 
 interface Props {
@@ -46,10 +54,43 @@ const ModalPregunta = ({ open, onClose, onSave, preguntaEditar }: Props) => {
   // Opciones (Respuestas)
   const [opciones, setOpciones] = useState<OpcionFrontend[]>([{ texto_opcion: '', orden: 1 }]);
 
+  // Matriz: Filas y Columnas (guardadas en configuracion_json o mapeadas)
+  const [filasMatriz, setFilasMatriz] = useState<OpcionFrontend[]>([{ texto_opcion: '', orden: 1 }]);
+  const [colsMatriz, setColsMatriz] = useState<OpcionFrontend[]>([{ texto_opcion: '', orden: 1 }]);
+  const [matrizMultiple, setMatrizMultiple] = useState(false);
+
   // Configuraciones
   const [obligatoria, setObligatoria] = useState(false);
   const [descripcion, setDescripcion] = useState('');
   const [mensajeError, setMensajeError] = useState('');
+
+  // Plantillas
+  const [plantillas, setPlantillas] = useState<{ id: number; nombre: string; detalles: any[] }[]>([]);
+  const [plantillaSeleccionada, setPlantillaSeleccionada] = useState<string>('');
+
+  useEffect(() => {
+    cargarPlantillas();
+  }, []);
+
+  const cargarPlantillas = async () => {
+    try {
+      const res = await api.get('/plantillas/');
+      setPlantillas(res.data);
+    } catch (error) {
+      console.error("Error al cargar plantillas", error);
+    }
+  };
+
+  const handleCargarPlantilla = (id: number) => {
+    const p = plantillas.find(pl => pl.id === id);
+    if (p) {
+      setPlantillaSeleccionada(String(id));
+      const nuevasOpciones = p.detalles
+        .sort((a: any, b: any) => a.orden - b.orden)
+        .map((d: any) => ({ texto_opcion: d.texto_opcion, orden: d.orden }));
+      setOpciones(nuevasOpciones);
+    }
+  };
 
   // Cargar datos si estamos editando
   useEffect(() => {
@@ -57,6 +98,12 @@ const ModalPregunta = ({ open, onClose, onSave, preguntaEditar }: Props) => {
       setTexto(preguntaEditar.texto_pregunta);
       setTipo(preguntaEditar.tipo);
       setOpciones(preguntaEditar.opciones.length > 0 ? preguntaEditar.opciones : [{ texto_opcion: '', orden: 1 }]);
+
+      // Cargar Matriz
+      if (preguntaEditar.filas) setFilasMatriz(preguntaEditar.filas);
+      if (preguntaEditar.columnas) setColsMatriz(preguntaEditar.columnas);
+      if (preguntaEditar.seleccion_multiple_matriz !== undefined) setMatrizMultiple(preguntaEditar.seleccion_multiple_matriz);
+
       setObligatoria(preguntaEditar.obligatoria);
       setDescripcion(preguntaEditar.descripcion || '');
       setMensajeError(preguntaEditar.mensaje_error || '');
@@ -70,27 +117,43 @@ const ModalPregunta = ({ open, onClose, onSave, preguntaEditar }: Props) => {
     setTexto('');
     setTipo('opcion_unica');
     setOpciones([{ texto_opcion: '', orden: 1 }]);
+    setFilasMatriz([{ texto_opcion: '', orden: 1 }]);
+    setColsMatriz([{ texto_opcion: '', orden: 1 }]);
+    setMatrizMultiple(false);
     setObligatoria(false);
     setDescripcion('');
     setMensajeError('');
     setTabActual(0);
+    setPlantillaSeleccionada(''); // Reset plantilla
   };
 
-  // Manejo de Opciones
-  const handleAddOpcion = () => {
-    setOpciones([...opciones, { texto_opcion: '', orden: opciones.length + 1 }]);
+  // Manejo de Opciones (Genérico para Opciones, Filas, Cols)
+  const handleAddOptionList = (setter: any, list: OpcionFrontend[]) => {
+      setter([...list, { texto_opcion: '', orden: list.length + 1 }]);
+  };
+  const handleChangeOptionList = (setter: any, list: OpcionFrontend[], index: number, val: string) => {
+      const copy = [...list];
+      copy[index].texto_opcion = val;
+      setter(copy);
+  };
+  const handleDeleteOptionList = (setter: any, list: OpcionFrontend[], index: number) => {
+      setter(list.filter((_, i) => i !== index));
   };
 
-  const handleChangeOpcion = (index: number, valor: string) => {
-    const nuevas = [...opciones];
-    nuevas[index].texto_opcion = valor;
-    setOpciones(nuevas);
+  // Drag & Drop Handler
+  const onDragEndList = (result: DropResult, list: OpcionFrontend[], setter: any) => {
+      if (!result.destination) return;
+      const items = Array.from(list);
+      const [reorderedItem] = items.splice(result.source.index, 1);
+      items.splice(result.destination.index, 0, reorderedItem);
+      // Reindexar orden visualmente si se desea, o simplemente guardar el array ordenado
+      setter(items.map((item, index) => ({ ...item, orden: index + 1 })));
   };
 
-  const handleDeleteOpcion = (index: number) => {
-    const nuevas = opciones.filter((_, i) => i !== index);
-    setOpciones(nuevas);
-  };
+  // Wrappers para la lista principal 'opciones'
+  const handleAddOpcion = () => handleAddOptionList(setOpciones, opciones);
+  const handleChangeOpcion = (i: number, v: string) => handleChangeOptionList(setOpciones, opciones, i, v);
+  const handleDeleteOpcion = (i: number) => handleDeleteOptionList(setOpciones, opciones, i);
 
   // Acción de Guardar
   const handleSave = (crearOtra: boolean) => {
@@ -99,15 +162,36 @@ const ModalPregunta = ({ open, onClose, onSave, preguntaEditar }: Props) => {
       return;
     }
 
+    // Generar ID temporal fresco si es nuevo (para evitar colisiones en "Guardar y Nuevo")
+    const idTemp = preguntaEditar ? preguntaEditar.id_temporal : Date.now();
+
+    // Preparar configuración JSON extendida para matriz
+    let configExtra: any = {
+        obligatoria: tipo === 'seccion' ? false : obligatoria,
+        mensaje_error: mensajeError,
+        descripcion,
+    };
+
+    let opcionesFinales: OpcionFrontend[] = [];
+
+    if (tipo === 'matriz') {
+        configExtra.filas = filasMatriz.filter(o => o.texto_opcion.trim() !== '');
+        configExtra.columnas = colsMatriz.filter(o => o.texto_opcion.trim() !== '');
+        configExtra.seleccion_multiple_matriz = matrizMultiple;
+    } else if (tipo !== 'texto_libre' && tipo !== 'seccion') {
+        opcionesFinales = opciones.filter(o => o.texto_opcion.trim() !== '');
+    }
+
     const nuevaPregunta: PreguntaFrontend = {
-      id_temporal: preguntaEditar?.id_temporal || Date.now(),
+      id_temporal: idTemp,
       texto_pregunta: texto,
       tipo,
-      orden: 0,
-      obligatoria: tipo === 'seccion' ? false : obligatoria,
-      opciones: (tipo === 'texto_libre' || tipo === 'seccion') ? [] : opciones.filter(o => o.texto_opcion.trim() !== ''),
+      orden: 0, // Se asigna en el padre
+      obligatoria: configExtra.obligatoria,
+      opciones: opcionesFinales,
       descripcion,
-      mensaje_error: mensajeError
+      mensaje_error: mensajeError,
+      ...configExtra
     };
 
     onSave(nuevaPregunta, crearOtra);
@@ -125,10 +209,9 @@ const ModalPregunta = ({ open, onClose, onSave, preguntaEditar }: Props) => {
       maxWidth="md"
       fullWidth
       scroll="paper"
-      // Atenuado de fondo (Backdrop)
       slotProps={{
         backdrop: {
-          sx: { backgroundColor: 'rgba(0, 0, 0, 0.7)' } // Más oscuro
+          sx: { backgroundColor: 'rgba(0, 0, 0, 0.7)' }
         }
       }}
     >
@@ -142,6 +225,7 @@ const ModalPregunta = ({ open, onClose, onSave, preguntaEditar }: Props) => {
             {tipo === 'seccion' ? 'Título de la Sección' : 'Pregunta'}
           </Typography>
           <TextField
+            autoFocus
             fullWidth
             placeholder={tipo === 'seccion' ? "Ej: Información Personal" : "Ej: ¿Qué opinas...?"}
             variant="standard"
@@ -189,8 +273,21 @@ const ModalPregunta = ({ open, onClose, onSave, preguntaEditar }: Props) => {
                   <Box display="flex" alignItems="center" gap={1}><Radio disabled size="small" /> <Box height={8} width="60%" bgcolor="#e0e0e0" /></Box>
                 </Box>
               )}
+              {tipo === 'opcion_multiple' && (
+                <Box sx={{ width: '100%', maxWidth: 200 }}>
+                  <Box display="flex" alignItems="center" gap={1} mb={1}><Checkbox checked disabled size="small" /> <Box height={8} width="80%" bgcolor="#e0e0e0" /></Box>
+                  <Box display="flex" alignItems="center" gap={1}><Checkbox disabled size="small" /> <Box height={8} width="60%" bgcolor="#e0e0e0" /></Box>
+                </Box>
+              )}
               {(tipo === 'texto_libre') && (
                 <Box sx={{ width: '100%', height: 60, border: '1px solid #bdbdbd', borderRadius: 1, bgcolor: 'white' }} />
+              )}
+              {tipo === 'matriz' && (
+                  <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1, width: '100%' }}>
+                      <Box></Box><Box bgcolor="#e0e0e0" height={10}/><Box bgcolor="#e0e0e0" height={10}/>
+                      <Box bgcolor="#e0e0e0" height={10}/><Radio disabled size="small"/><Radio disabled size="small"/>
+                      <Box bgcolor="#e0e0e0" height={10}/><Radio disabled size="small"/><Radio disabled size="small"/>
+                  </Box>
               )}
             </Paper>
           </Grid>
@@ -207,15 +304,88 @@ const ModalPregunta = ({ open, onClose, onSave, preguntaEditar }: Props) => {
               </Tabs>
             </Box>
 
-            {/* Panel: Respuestas (Opciones) */}
+            {/* Panel: Respuestas (Opciones / Matriz) */}
             {tabActual === 0 && (
               <Box sx={{ p: 2 }}>
                 {tipo === 'texto_libre' ? (
                   <Typography variant="body2" color="text.secondary" sx={{ py: 2, fontStyle: 'italic' }}>
                     Texto libre.
                   </Typography>
+                ) : tipo === 'matriz' ? (
+                    <Grid container spacing={3}>
+                        <Grid size={12}>
+                            <FormControlLabel
+                                control={<Checkbox checked={matrizMultiple} onChange={(e) => setMatrizMultiple(e.target.checked)} />}
+                                label="Permitir selección múltiple por fila"
+                            />
+                        </Grid>
+                        <Grid size={6}>
+                            <Typography variant="subtitle2" gutterBottom>Filas (Preguntas)</Typography>
+                            <DragDropContext onDragEnd={(res) => onDragEndList(res, filasMatriz, setFilasMatriz)}>
+                                <Droppable droppableId="filas-list">
+                                    {(provided) => (
+                                        <List dense {...provided.droppableProps} ref={provided.innerRef}>
+                                            {filasMatriz.map((op, idx) => (
+                                                <Draggable key={idx} draggableId={`fila-${idx}`} index={idx}>
+                                                    {(provided) => (
+                                                        <ListItem ref={provided.innerRef} {...provided.draggableProps} sx={{ px: 0 }}>
+                                                            <ListItemIcon {...provided.dragHandleProps} sx={{ minWidth: 30, cursor: 'grab' }}><DragHandleIcon fontSize="small" /></ListItemIcon>
+                                                            <TextField fullWidth size="small" value={op.texto_opcion} onChange={(e) => handleChangeOptionList(setFilasMatriz, filasMatriz, idx, e.target.value)} />
+                                                            <IconButton size="small" color="error" onClick={() => handleDeleteOptionList(setFilasMatriz, filasMatriz, idx)}><DeleteIcon fontSize="small"/></IconButton>
+                                                        </ListItem>
+                                                    )}
+                                                </Draggable>
+                                            ))}
+                                            {provided.placeholder}
+                                        </List>
+                                    )}
+                                </Droppable>
+                            </DragDropContext>
+                            <Button startIcon={<AddIcon />} size="small" onClick={() => handleAddOptionList(setFilasMatriz, filasMatriz)}>Fila</Button>
+                        </Grid>
+
+                        <Grid size={6}>
+                            <Typography variant="subtitle2" gutterBottom>Columnas (Opciones)</Typography>
+                            <DragDropContext onDragEnd={(res) => onDragEndList(res, colsMatriz, setColsMatriz)}>
+                                <Droppable droppableId="cols-list">
+                                    {(provided) => (
+                                        <List dense {...provided.droppableProps} ref={provided.innerRef}>
+                                            {colsMatriz.map((op, idx) => (
+                                                <Draggable key={idx} draggableId={`col-${idx}`} index={idx}>
+                                                    {(provided) => (
+                                                        <ListItem ref={provided.innerRef} {...provided.draggableProps} sx={{ px: 0 }}>
+                                                            <ListItemIcon {...provided.dragHandleProps} sx={{ minWidth: 30, cursor: 'grab' }}><DragHandleIcon fontSize="small" /></ListItemIcon>
+                                                            <TextField fullWidth size="small" value={op.texto_opcion} onChange={(e) => handleChangeOptionList(setColsMatriz, colsMatriz, idx, e.target.value)} />
+                                                            <IconButton size="small" color="error" onClick={() => handleDeleteOptionList(setColsMatriz, colsMatriz, idx)}><DeleteIcon fontSize="small"/></IconButton>
+                                                        </ListItem>
+                                                    )}
+                                                </Draggable>
+                                            ))}
+                                            {provided.placeholder}
+                                        </List>
+                                    )}
+                                </Droppable>
+                            </DragDropContext>
+                            <Button startIcon={<AddIcon />} size="small" onClick={() => handleAddOptionList(setColsMatriz, colsMatriz)}>Columna</Button>
+                        </Grid>
+                    </Grid>
                 ) : (
                   <>
+                    <Box display="flex" justifyContent="flex-end" mb={2}>
+                        <FormControl size="small" sx={{ minWidth: 200 }}>
+                            <InputLabel>Cargar Plantilla</InputLabel>
+                            <Select
+                                value={plantillaSeleccionada}
+                                label="Cargar Plantilla"
+                                onChange={(e) => handleCargarPlantilla(Number(e.target.value))}
+                            >
+                                {plantillas.map(p => (
+                                    <MenuItem key={p.id} value={p.id}>{p.nombre}</MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                    </Box>
+
                     {opciones.map((opcion, idx) => (
                       <Box key={idx} display="flex" alignItems="center" gap={1} mb={1}>
                         <TextField
