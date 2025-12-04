@@ -135,7 +135,7 @@ const Plantillas = () => {
                     <TableBody>
                         {plantillas.map((p) => (
                             <TableRow key={p.id}>
-                                <TableCell fontWeight="bold">{p.nombre}</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold' }}>{p.nombre}</TableCell>
                                 <TableCell>{p.descripcion}</TableCell>
                                 <TableCell align="center">{p.detalles.length}</TableCell>
                                 <TableCell align="center">
