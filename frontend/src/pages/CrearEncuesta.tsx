@@ -17,6 +17,7 @@ import PublishIcon from '@mui/icons-material/Publish';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ViewHeadlineIcon from '@mui/icons-material/ViewHeadline';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import { useForm, Controller } from 'react-hook-form';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api/axios';
@@ -24,6 +25,7 @@ import { toast } from 'react-toastify';
 import { usarAuthStore } from '../context/authStore';
 
 import ModalPregunta, { type PreguntaFrontend } from '../components/ModalPregunta';
+import ConstructorReglas, { ReglaRestriccion } from '../components/ConstructorReglas';
 
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 
@@ -32,7 +34,8 @@ interface FormularioEncuesta {
     titulo: string;
     publico_objetivo: 'alumnos' | 'docentes' | 'ambos';
     responsable: string;
-    restringido_a?: string; // Lista negra 
+    restringido_a?: string; // Legacy o display string
+    filtros_json?: ReglaRestriccion[]; // Nuevo campo estructurado
     prioridad: 'obligatoria' | 'opcional' | 'evaluacion_docente';
     acciones_disparadoras: string[];
     configuracion: {
@@ -42,6 +45,8 @@ interface FormularioEncuesta {
     };
     descripcion?: string;
     mensaje_final?: string;
+    fecha_inicio: string;
+    fecha_fin: string;
 }
 
 const CrearEncuesta = () => {
@@ -73,11 +78,16 @@ const CrearEncuesta = () => {
             responsable: usuario?.sub || 'Admin',
             prioridad: 'opcional',
             acciones_disparadoras: ['al_iniciar_sesion'],
+            // Fechas por defecto: Mañana inicio del día, Pasado mañana fin del día (como placeholder válido)
+            // Backend espera ISO String.
+            fecha_inicio: new Date(new Date().setHours(0, 0, 1, 0)).toISOString().slice(0, 16),
+            fecha_fin: new Date(new Date().setHours(23, 59, 59, 0)).toISOString().slice(0, 16),
             configuracion: {
                 paginacion: 'por_pregunta',
                 mostrar_progreso: 'porcentaje',
                 permitir_saltar: true
-            }
+            },
+            filtros_json: []
         }
     });
 
@@ -111,6 +121,10 @@ const CrearEncuesta = () => {
             setValue("prioridad", data.prioridad || 'opcional');
             setValue("acciones_disparadoras", data.acciones_disparadoras || []);
 
+            // Cargar fechas (convertir ISO a formato input datetime-local: YYYY-MM-DDTHH:mm)
+            if (data.fecha_inicio) setValue("fecha_inicio", data.fecha_inicio.slice(0, 16));
+            if (data.fecha_fin) setValue("fecha_fin", data.fecha_fin.slice(0, 16));
+
             // Cargar configuración asegurando valores por defecto
             if (data.configuracion) {
                 setValue("configuracion.paginacion", data.configuracion.paginacion || 'por_pregunta');
@@ -120,6 +134,10 @@ const CrearEncuesta = () => {
 
             if (data.reglas && data.reglas.length > 0) {
                 setValue("publico_objetivo", data.reglas[0].publico_objetivo);
+                // Cargar reglas avanzadas si existen
+                if (data.reglas[0].filtros_json) {
+                    setValue("filtros_json", data.reglas[0].filtros_json);
+                }
             }
 
             const preguntasMapeadas: PreguntaFrontend[] = data.preguntas.map((p: any) => ({
@@ -130,12 +148,16 @@ const CrearEncuesta = () => {
                 obligatoria: p.configuracion_json?.obligatoria || false,
                 mensaje_error: p.configuracion_json?.mensaje_error || '',
                 descripcion: p.configuracion_json?.descripcion || '',
+                // Mapeo inverso de matriz si existe
+                columnas_matriz: p.configuracion_json?.columnas?.map((c:any) => c.texto) || [],
+                // Si es matriz, las filas suelen guardarse en config o en opciones, aquí asumimos opciones
                 opciones: p.opciones.map((o: any) => ({
                     texto_opcion: o.texto_opcion,
                     orden: o.orden
                 }))
             }));
-            setPreguntas(preguntasMapeadas);
+            // Ordenar estrictamente por el campo orden
+            setPreguntas(preguntasMapeadas.sort((a, b) => a.orden - b.orden));
 
         } catch (error) {
             console.error("Error cargando encuesta:", error);
@@ -183,12 +205,20 @@ const CrearEncuesta = () => {
             setPreguntas(prev => prev.map(p => p.id_temporal === pregunta.id_temporal ? pregunta : p));
         } else {
             // Crear nueva (asignar orden al final)
+            // Aseguramos que el ID temporal sea único si venimos de "Guardar y Nuevo"
+            // El modal ya genera un ID nuevo, pero validamos aquí
             const nuevaConOrden = { ...pregunta, orden: preguntas.length + 1 };
             setPreguntas(prev => [...prev, nuevaConOrden]);
         }
 
+        // AUTO-SAVE IMPLÍCITO (Disparar efecto)
+        // Nota: Al actualizar estado 'preguntas', el efecto de auto-save se activará abajo
+
         if (!crearOtra) {
             setModalAbierto(false);
+        } else {
+            // Si es crear otra, reseteamos el estado de edición para que el modal sepa que es nueva
+            setPreguntaEditando(null);
         }
     };
 
@@ -219,23 +249,43 @@ const CrearEncuesta = () => {
         setPreguntas(updatedItems);
     };
 
-    // Acción: Guardar Global
-    const onGuardar = async (data: FormularioEncuesta) => {
-        setErrorValidacion(false);
-        console.log("Guardando...", data);
+    // Lógica de Guardado (Separada del handler)
+    const guardarDatos = async (data: FormularioEncuesta, silencioso = false) => {
+        if (!silencioso) setErrorValidacion(false);
+
+        // Validaciones de Fecha
+        const inicio = new Date(data.fecha_inicio);
+        const fin = new Date(data.fecha_fin);
+        const ahora = new Date();
+        // Margen de 1 minuto para evitar errores por milisegundos al crear
+        ahora.setMinutes(ahora.getMinutes() - 1);
+
+        if (esNuevo && inicio < ahora) {
+            if (!silencioso) toast.error("La fecha de inicio no puede ser anterior a la actual.");
+            return;
+        }
+        if (fin <= inicio) {
+            if (!silencioso) toast.error("La fecha de fin debe ser posterior a la fecha de inicio.");
+            return;
+        }
+
+        if (!silencioso) console.log("Guardando...", data);
 
         try {
             // Mapeo al formato que espera el backend (schemas.EncuestaCrear)
             const payload = {
                 nombre: data.titulo,
-                fecha_inicio: new Date().toISOString(),
-                fecha_fin: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString(),
+                fecha_inicio: new Date(data.fecha_inicio).toISOString(),
+                fecha_fin: new Date(data.fecha_fin).toISOString(),
                 prioridad: data.prioridad,
                 acciones_disparadoras: data.acciones_disparadoras,
                 configuracion: data.configuracion,
                 activo: true,
                 estado: estado,
-                reglas: [{ publico_objetivo: data.publico_objetivo }],
+                reglas: [{
+                    publico_objetivo: data.publico_objetivo,
+                    filtros_json: data.filtros_json // Enviamos las reglas estructuradas
+                }],
                 descripcion: data.descripcion,
                 mensaje_final: data.mensaje_final,
 
@@ -247,7 +297,11 @@ const CrearEncuesta = () => {
                     configuracion_json: {
                         obligatoria: p.obligatoria,
                         mensaje_error: p.mensaje_error,
-                        descripcion: p.descripcion
+                        descripcion: p.descripcion,
+                        // Mapeo de campos extra de matriz
+                        filas: p.filas, // Si existen
+                        columnas: p.columnas, // Si existen
+                        seleccion_multiple_matriz: p.seleccion_multiple_matriz
                     },
                     activo: true,
                     opciones: p.opciones.map((o, i) => ({
@@ -259,26 +313,41 @@ const CrearEncuesta = () => {
 
             if (esNuevo) {
                 const res = await api.post('/admin/encuestas/', payload);
-                toast.success("Encuesta creada exitosamente");
+                if (!silencioso) toast.success("Encuesta creada exitosamente");
                 setEsNuevo(false);
                 navigate(`/encuestas/crear?id=${res.data.id}`, { replace: true });
             } else {
                 // PUT: Actualización
                 const res = await api.put(`/admin/encuestas/${idEncuesta}`, payload);
-                toast.success("Encuesta actualizada exitosamente");
+                if (!silencioso) toast.success("Encuesta actualizada exitosamente");
                 // Actualizar estado local con la respuesta para asegurar sincronía
                 setEstado(res.data.estado);
             }
-
-            // Opcional: volver a la lista o quedarse
-            // navigate('/encuestas'); 
         } catch (error: any) {
             console.error(error);
-            // Mostrar error detallado si el backend lo envía
-            const msj = error.response?.data?.detail || "Error al guardar la encuesta";
-            toast.error(msj);
+            if (!silencioso) {
+                const msj = error.response?.data?.detail || "Error al guardar la encuesta";
+                toast.error(msj);
+            }
         }
     };
+
+    // Handler para Submit Manual (compatible con React Hook Form)
+    const handleSubmitGuardar = (data: FormularioEncuesta) => {
+        guardarDatos(data, false);
+    };
+
+    // Auto-save Effect
+    // Escuchamos cambios en 'preguntas' y valores del formulario
+    const values = watch();
+    useEffect(() => {
+        if (!esNuevo && idEncuesta) { // Solo auto-guardar si ya existe
+            const timer = setTimeout(() => {
+                guardarDatos(values, true);
+            }, 2000); // 2 segundos de debounce
+            return () => clearTimeout(timer);
+        }
+    }, [values, preguntas]); // Dependencias: formulario y estructura preguntas
 
     // Acciones de Estado
     const cambiarEstadoEncuesta = async (nuevoEstado: 'publicar' | 'finalizar') => {
@@ -304,6 +373,11 @@ const CrearEncuesta = () => {
     // Acción: Finalizar
     const onFinalizar = async () => {
         cambiarEstadoEncuesta('finalizar');
+    };
+
+    // Acción: Probar
+    const onProbar = () => {
+        if (idEncuesta) window.open(`/encuestas/prueba/${idEncuesta}`, '_blank');
     };
 
     // Acción: Descartar (X)
@@ -341,7 +415,7 @@ const CrearEncuesta = () => {
                     <Box display="flex" gap={1}>
                         {esEditable && (
                             <Tooltip title="Guardar de forma manual">
-                                <IconButton size="small" onClick={handleSubmit(onGuardar, onError)} color="primary"><CloudUploadIcon /></IconButton>
+                            <IconButton size="small" onClick={handleSubmit(handleSubmitGuardar, onError)} color="primary"><CloudUploadIcon /></IconButton>
                             </Tooltip>
                         )}
                         <Tooltip title="Descartar cambios"><IconButton size="small" onClick={onDescartar} color="error"><CloseIcon /></IconButton></Tooltip>
@@ -349,6 +423,9 @@ const CrearEncuesta = () => {
                     </Box>
                 </Box>
                 <Box display="flex" gap={1}>
+                    {!esNuevo && (
+                        <Button variant="outlined" startIcon={<PlayArrowIcon />} onClick={onProbar} sx={{ textTransform: 'none' }}>Probar</Button>
+                    )}
                     {!esNuevo && estado === 'borrador' && (
                         <Button variant="contained" color="success" startIcon={<PublishIcon />} onClick={onPublicar} sx={{ textTransform: 'none' }}>Publicar</Button>
                     )}
@@ -364,12 +441,13 @@ const CrearEncuesta = () => {
 
             {/* 3. FORMULARIO PRINCIPAL */}
             <Paper sx={{ p: 4, flexGrow: 1, borderRadius: 2 }}>
-                <form onSubmit={handleSubmit(onGuardar, onError)}>
+                <form onSubmit={handleSubmit(handleSubmitGuardar, onError)}>
                     <Grid container spacing={4}>
 
                         {/* Título Gigante (Input transparente) */}
                         <Grid size={12}>
                             <TextField
+                                autoFocus // UX: Foco al abrir
                                 fullWidth
                                 placeholder="Por ejemplo, Encuesta de Evaluación de Docentes"
                                 variant="standard"
@@ -394,14 +472,46 @@ const CrearEncuesta = () => {
                                     variant="outlined"
                                 />
                             </Box>
-                            <Box display="flex" alignItems="center" gap={2}>
-                                <Typography variant="body2" fontWeight="bold" width={100}>Restringido a</Typography>
+                            {/* Constructor de Reglas Avanzadas */}
+                            <Box mt={2}>
+                                <Typography variant="subtitle2" fontWeight="bold" mb={1}>Restringido a (Reglas Avanzadas)</Typography>
+                                {esEditable ? (
+                                    <Controller
+                                        name="filtros_json"
+                                        control={control}
+                                        render={({ field }) => (
+                                            <ConstructorReglas
+                                                reglas={field.value || []}
+                                                onChange={field.onChange}
+                                            />
+                                        )}
+                                    />
+                                ) : (
+                                    <Typography variant="body2" color="text.secondary">
+                                        {(watch('filtros_json') || []).length > 0
+                                            ? `${(watch('filtros_json') || []).length} reglas definidas`
+                                            : "Sin restricciones adicionales"}
+                                    </Typography>
+                                )}
+                            </Box>
+
+                            {/* Fechas de Inicio y Fin */}
+                            <Box display="flex" gap={2} mt={2}>
                                 <TextField
-                                    placeholder="Ej: Facultad de Ingeniería"
-                                    variant="standard"
+                                    label="Inicio"
+                                    type="datetime-local"
                                     fullWidth
+                                    InputLabelProps={{ shrink: true }}
+                                    {...register("fecha_inicio", { required: true })}
                                     disabled={!esEditable}
-                                    {...register("restringido_a")}
+                                />
+                                <TextField
+                                    label="Fin"
+                                    type="datetime-local"
+                                    fullWidth
+                                    InputLabelProps={{ shrink: true }}
+                                    {...register("fecha_fin", { required: true })}
+                                    disabled={!esEditable}
                                 />
                             </Box>
                         </Grid >

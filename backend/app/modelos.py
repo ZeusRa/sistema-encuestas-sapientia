@@ -59,6 +59,67 @@ class UsuarioAdmin(Base):
     clave_encriptada = Column(String(255), nullable=False)
     rol = Column(Enum(RolAdmin, schema="encuestas_oltp"), nullable=False)
     fecha_creacion = Column(DateTime, nullable=False)
+    fecha_ultimo_login = Column(DateTime, nullable=True)
+    activo = Column(Boolean, default=True, nullable=False)
+    debe_cambiar_clave = Column(Boolean, default=False, nullable=False)
+
+    permisos_especificos = relationship("UsuarioPermiso", back_populates="usuario", cascade="all, delete-orphan")
+
+class Permiso(Base):
+    __tablename__ = "permiso"
+    __table_args__ = {"schema": "encuestas_oltp"}
+
+    id_permiso = Column(Integer, primary_key=True)
+    codigo = Column(String(50), unique=True, nullable=False)
+    nombre = Column(String(100), nullable=False)
+    descripcion = Column(Text, nullable=True)
+    categoria = Column(String(30), nullable=False)
+
+    asignaciones_rol = relationship("RolPermiso", back_populates="permiso", cascade="all, delete-orphan")
+    asignaciones_usuario = relationship("UsuarioPermiso", back_populates="permiso", cascade="all, delete-orphan")
+
+class RolPermiso(Base):
+    __tablename__ = "rol_permiso"
+    __table_args__ = {"schema": "encuestas_oltp"}
+
+    # id_rol es un ENUM en la BD, no una FK a una tabla de roles.
+    id_rol = Column(Enum(RolAdmin, schema="encuestas_oltp"), primary_key=True)
+    id_permiso = Column(Integer, ForeignKey("encuestas_oltp.permiso.id_permiso"), primary_key=True)
+
+    permiso = relationship("Permiso", back_populates="asignaciones_rol")
+
+class UsuarioPermiso(Base):
+    __tablename__ = "usuario_permiso"
+    __table_args__ = {"schema": "encuestas_oltp"}
+
+    id_usuario = Column(Integer, ForeignKey("encuestas_oltp.usuario_admin.id_admin"), primary_key=True)
+    id_permiso = Column(Integer, ForeignKey("encuestas_oltp.permiso.id_permiso"), primary_key=True)
+    tiene = Column(Boolean, default=True, nullable=False)
+
+    usuario = relationship("UsuarioAdmin", back_populates="permisos_especificos")
+    permiso = relationship("Permiso", back_populates="asignaciones_usuario")
+
+class PlantillaOpciones(Base):
+    __tablename__ = "plantilla_opciones"
+    __table_args__ = {"schema": "encuestas_oltp"}
+
+    id = Column(Integer, primary_key=True)
+    nombre = Column(String(100), nullable=False)
+    descripcion = Column(Text, nullable=True)
+    fecha_creacion = Column(DateTime, server_default=func.now())
+
+    detalles = relationship("PlantillaOpcionDetalle", back_populates="plantilla", cascade="all, delete-orphan")
+
+class PlantillaOpcionDetalle(Base):
+    __tablename__ = "plantilla_opcion_detalle"
+    __table_args__ = {"schema": "encuestas_oltp"}
+
+    id = Column(Integer, primary_key=True)
+    id_plantilla = Column(Integer, ForeignKey("encuestas_oltp.plantilla_opciones.id"), nullable=False)
+    texto_opcion = Column(String(255), nullable=False)
+    orden = Column(Integer, nullable=False)
+
+    plantilla = relationship("PlantillaOpciones", back_populates="detalles")
 
 class Encuesta(Base):
     __tablename__ = "encuesta"
@@ -133,6 +194,7 @@ class ReglaAsignacion(Base):
     id_carrera = Column(Integer, nullable=True)
     id_asignatura = Column(Integer, nullable=True)
     publico_objetivo = Column(Enum(PublicoObjetivo, schema="encuestas_oltp"), nullable=False)
+    filtros_json = Column(JSONB, nullable=True)
 
     encuesta = relationship("Encuesta", back_populates="reglas")
 
@@ -165,13 +227,20 @@ class OpcionRespuesta(Base):
 class AsignacionUsuario(Base):
     __tablename__ = "asignacion_usuario"
     __table_args__ = (
-        UniqueConstraint('id_usuario', 'id_encuesta', name='uq_usuario_encuesta'),
+        # Nueva UniqueConstraint incluyendo id_referencia_contexto
+        # En PostgreSQL, NULL != NULL en Unique Constraints por defecto hasta v15 (NULLS NOT DISTINCT).
+        # Dado que no podemos usar sintaxis específica de PG15 fácilmente en SQLAlchemy core abstraction sin raw DDL,
+        # definimos la constraint estándar. Si id_referencia_contexto es NULL, permitir duplicados es el comportamiento PG < 15.
+        # Pero el DDL script usa NULLS NOT DISTINCT. Aquí solo reflejamos la intención.
+        UniqueConstraint('id_usuario', 'id_encuesta', 'id_referencia_contexto', name='uq_usuario_encuesta_contexto'),
         {"schema": "encuestas_oltp"}
     )
 
     id = Column(Integer, primary_key=True)
     id_usuario = Column(Integer, nullable=False, index=True) # ID externo
     id_encuesta = Column(Integer, ForeignKey("encuestas_oltp.encuesta.id"), nullable=False)
+    id_referencia_contexto = Column(String(255), nullable=True)
+    metadatos_asignacion = Column(JSONB, default={}, nullable=False)
     estado = Column(Enum(EstadoAsignacion, schema="encuestas_oltp"), default=EstadoAsignacion.pendiente, index=True)
     fecha_asignacion = Column(DateTime(timezone=True), server_default=func.now())
     fecha_realizacion = Column(DateTime(timezone=True), nullable=True)
