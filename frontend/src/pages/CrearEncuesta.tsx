@@ -23,6 +23,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api/axios';
 import { toast } from 'react-toastify';
 import { usarAuthStore } from '../context/authStore';
+import { useDebounce } from '../hooks/useDebounce'; // Asegurarse de tener este hook o implementarlo
 
 import ModalPregunta, { type PreguntaFrontend } from '../components/ModalPregunta';
 import ConstructorReglas, { ReglaRestriccion } from '../components/ConstructorReglas';
@@ -224,16 +225,16 @@ const CrearEncuesta = () => {
 
     const borrarPregunta = (id_temporal: number | string) => {
         if (!esEditable) return;
-            const id = typeof id_temporal === 'string' ? Number(id_temporal) : id_temporal;
+        const id = typeof id_temporal === 'string' ? Number(id_temporal) : id_temporal;
         if (isNaN(id)) {
             console.error("ID inválido para borrar:", id_temporal);
-        return;
-    }
+            return;
+        }
         if (window.confirm("¿Estás seguro de borrar este elemento?")) {
-        const nuevas = preguntas.filter(p => p.id_temporal !== id);
-        const reordenadas = nuevas.map((p, index) => ({ ...p, orden: index + 1 }));
-        setPreguntas(reordenadas);
-    }
+            const nuevas = preguntas.filter(p => p.id_temporal !== id);
+            const reordenadas = nuevas.map((p, index) => ({ ...p, orden: index + 1 }));
+            setPreguntas(reordenadas);
+        }
     };
 
     // Manejador de Drag & Drop
@@ -272,7 +273,6 @@ const CrearEncuesta = () => {
         if (!silencioso) console.log("Guardando...", data);
 
         try {
-            // Mapeo al formato que espera el backend (schemas.EncuestaCrear)
             const payload = {
                 nombre: data.titulo,
                 fecha_inicio: new Date(data.fecha_inicio).toISOString(),
@@ -288,8 +288,6 @@ const CrearEncuesta = () => {
                 }],
                 descripcion: data.descripcion,
                 mensaje_final: data.mensaje_final,
-
-                // AQUÍ ENVIAMOS LAS PREGUNTAS CREADAS
                 preguntas: preguntas.map((p, index) => ({
                     texto_pregunta: p.texto_pregunta,
                     orden: index + 1,
@@ -317,7 +315,6 @@ const CrearEncuesta = () => {
                 setEsNuevo(false);
                 navigate(`/encuestas/crear?id=${res.data.id}`, { replace: true });
             } else {
-                // PUT: Actualización
                 const res = await api.put(`/admin/encuestas/${idEncuesta}`, payload);
                 if (!silencioso) toast.success("Encuesta actualizada exitosamente");
                 // Actualizar estado local con la respuesta para asegurar sincronía
@@ -493,6 +490,26 @@ const CrearEncuesta = () => {
                                             : "Sin restricciones adicionales"}
                                     </Typography>
                                 )}
+                            </Box>
+
+                            {/* Fechas de Inicio y Fin */}
+                            <Box display="flex" gap={2} mt={2}>
+                                <TextField
+                                    label="Inicio"
+                                    type="datetime-local"
+                                    fullWidth
+                                    InputLabelProps={{ shrink: true }}
+                                    {...register("fecha_inicio", { required: true })}
+                                    disabled={!esEditable}
+                                />
+                                <TextField
+                                    label="Fin"
+                                    type="datetime-local"
+                                    fullWidth
+                                    InputLabelProps={{ shrink: true }}
+                                    {...register("fecha_fin", { required: true })}
+                                    disabled={!esEditable}
+                                />
                             </Box>
 
                             {/* Fechas de Inicio y Fin */}
