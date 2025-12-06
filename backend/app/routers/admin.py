@@ -6,6 +6,7 @@ from app import modelos, schemas
 from app.routers.auth import oauth2_scheme
 from jose import JWTError, jwt
 from app.security import CLAVE_SECRETA, ALGORITMO
+from app.services import sapientia_service
 
 router = APIRouter(
     prefix="/admin",
@@ -261,56 +262,76 @@ def publicar_encuesta(
     if encuesta.estado != modelos.EstadoEncuesta.borrador:
         raise HTTPException(status_code=400, detail="Solo se pueden publicar encuestas en estado BORRADOR")
 
-    # --- LÓGICA DE SIMULACIÓN JIT (FASE 3) ---
-    # Si la encuesta es de evaluación docente o tiene cierta configuración, simulamos asignación masiva
-    if encuesta.prioridad == modelos.PrioridadEncuesta.evaluacion_docente:
-        simular_asignacion_jit(bd, encuesta.id)
+    # --- LÓGICA DE PUBLICACIÓN ---
+    try:
+        # A. PUBLICO ALUMNOS O AMBOS
+        if encuesta.reglas[0].publico_objetivo in [modelos.PublicoObjetivo.alumnos, modelos.PublicoObjetivo.ambos]:
+            
+            # CASE A.1: Evaluación Docente (SOLO ALUMNOS)
+            if encuesta.prioridad == modelos.PrioridadEncuesta.evaluacion_docente:
+                if encuesta.reglas[0].publico_objetivo == modelos.PublicoObjetivo.ambos:
+                     raise HTTPException(status_code=400, detail="La evaluación docente no puede ser para AMBOS públicos.")
 
-    encuesta.estado = modelos.EstadoEncuesta.en_curso
-    # ✅ Registrar quién publicó (como modificación)
-    encuesta.usuario_modificacion = usuario.id_admin
-    
-    bd.commit()
-    bd.refresh(encuesta)
-    return encuesta
+                asignaciones = sapientia_service.get_contexto_evaluacion_docente(bd)
+                for item in asignaciones:
+                   crear_asignacion_si_no_existe(bd, encuesta.id, item['id_usuario'], item['id_referencia_contexto'], item['metadatos'])
 
-def simular_asignacion_jit(bd: Session, id_encuesta: int):
-    """
-    Simula la obtención de datos de Sapientia y crea asignaciones masivas con contexto.
-    """
-    # 1. Datos simulados (Alumno - Materia - Docente)
-    datos_jit = [
-        {"id_usuario": 1, "materia": "Física I", "docente": "Juan Perez", "cod_materia": "FIS101", "id_docente": 101},
-        {"id_usuario": 1, "materia": "Cálculo I", "docente": "Maria Gomez", "cod_materia": "CAL101", "id_docente": 102},
-        {"id_usuario": 2, "materia": "Física I", "docente": "Juan Perez", "cod_materia": "FIS101", "id_docente": 101},
-        # Agrega más datos ficticios según necesidad
-    ]
 
-    for dato in datos_jit:
-        # Generar ID de contexto único
-        id_contexto = f"{dato['cod_materia']}-{dato['id_docente']}"
+            # CASE A.2 / A.3: Opcional u Obligatoria (ALUMNOS)
+            else:
+                alumnos = sapientia_service.get_alumnos_cursando(bd)
+                for alu in alumnos:
+                    # Contexto simple: Solo el alumno
+                    id_contexto = f"GEN-ALU-{alu['id']}"
+                    crear_asignacion_si_no_existe(bd, encuesta.id, alu['id'], id_contexto, {"nombre_alumno": alu['nombre']})
 
-        # Verificar si ya existe (idempotencia)
-        existe = bd.query(modelos.AsignacionUsuario).filter(
-            modelos.AsignacionUsuario.id_usuario == dato['id_usuario'],
-            modelos.AsignacionUsuario.id_encuesta == id_encuesta,
-            modelos.AsignacionUsuario.id_referencia_contexto == id_contexto
-        ).first()
+        # B. PUBLICO DOCENTES O AMBOS
+        if encuesta.reglas[0].publico_objetivo in [modelos.PublicoObjetivo.docentes, modelos.PublicoObjetivo.ambos]:
+            
+            # CASE B.1: Evaluación Docente (PROHIBIDO)
+            if encuesta.prioridad == modelos.PrioridadEncuesta.evaluacion_docente:
+                 # Ya validado arriba si es "ambos", si es "docentes":
+                 if encuesta.reglas[0].publico_objetivo == modelos.PublicoObjetivo.docentes:
+                      raise HTTPException(status_code=400, detail="No existe evaluación docente PARA docentes.")
 
-        if not existe:
-            nueva_asignacion = modelos.AsignacionUsuario(
-                id_usuario=dato['id_usuario'],
-                id_encuesta=id_encuesta,
-                id_referencia_contexto=id_contexto,
-                metadatos_asignacion={
-                    "nombre_materia": dato['materia'],
-                    "docente": dato['docente']
-                },
-                estado=modelos.EstadoAsignacion.pendiente
-            )
-            bd.add(nueva_asignacion)
+            # CASE B.2: Generica
+            docentes = sapientia_service.get_docentes_activos(bd)
+            for doc in docentes:
+                 id_contexto = f"GEN-DOC-{doc['id']}"
+                 crear_asignacion_si_no_existe(bd, encuesta.id, doc['id'], id_contexto, {"nombre_docente": doc['nombre']})
 
-    bd.flush() # Asegurar IDs antes de commit final en la función padre
+        encuesta.estado = modelos.EstadoEncuesta.en_curso
+        encuesta.usuario_modificacion = usuario.id_admin
+        bd.commit()
+        bd.refresh(encuesta)
+        return encuesta
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        bd.rollback()
+        print(f"Error publicando encuesta: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno al publicar: {str(e)}")
+
+def crear_asignacion_si_no_existe(bd: Session, id_encuesta: int, id_usuario: int, id_contexto: str, metadatos: dict):
+    existe = bd.query(modelos.AsignacionUsuario).filter(
+        modelos.AsignacionUsuario.id_usuario == id_usuario,
+        modelos.AsignacionUsuario.id_encuesta == id_encuesta,
+        modelos.AsignacionUsuario.id_referencia_contexto == id_contexto
+    ).first()
+
+    if not existe:
+        nueva = modelos.AsignacionUsuario(
+            id_usuario=id_usuario,
+            id_encuesta=id_encuesta,
+            id_referencia_contexto=id_contexto,
+            metadatos_asignacion=metadatos,
+            estado=modelos.EstadoAsignacion.pendiente
+        )
+        bd.add(nueva)
+
+
+
 
 @router.post("/encuestas/{encuesta_id}/duplicar", response_model=schemas.EncuestaSalida, status_code=status.HTTP_201_CREATED)
 def duplicar_encuesta(

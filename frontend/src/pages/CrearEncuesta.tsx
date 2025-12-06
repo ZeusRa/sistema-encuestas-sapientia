@@ -3,7 +3,7 @@ import {
     Box, Typography, Button, Breadcrumbs, Link, IconButton, TextField,
     Paper, Tabs, Tab, RadioGroup, FormControlLabel, Radio,
     Grid, Tooltip, Alert, Chip, Avatar, List, ListItem, ListItemText, ListItemIcon,
-    CircularProgress
+    CircularProgress, MenuItem
 } from '@mui/material';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'; // Guardar manual
@@ -26,7 +26,7 @@ import { usarAuthStore } from '../context/authStore';
 import { useDebounce } from '../hooks/useDebounce'; // Asegurarse de tener este hook o implementarlo
 
 import ModalPregunta, { type PreguntaFrontend } from '../components/ModalPregunta';
-import ConstructorReglas, { ReglaRestriccion } from '../components/ConstructorReglas';
+import ConstructorReglas, { type ReglaRestriccion } from '../components/ConstructorReglas';
 
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 
@@ -109,6 +109,24 @@ const CrearEncuesta = () => {
         }
     }, [idEncuesta]);
 
+    // --- CARGAR USUARIOS (Para Responsable) ---
+    const [usuariosDisponibles, setUsuariosDisponibles] = useState<any[]>([]);
+    useEffect(() => {
+        const fetchUsuarios = async () => {
+            try {
+                // Intentamos cargar usuarios. Si falla (por permisos), usamos el actual.
+                const res = await api.get('/usuarios/');
+                setUsuariosDisponibles(res.data);
+            } catch (error) {
+                console.warn("No se pudo cargar lista de usuarios", error);
+                if (usuario?.sub) {
+                    setUsuariosDisponibles([{ nombre_usuario: usuario.sub }]);
+                }
+            }
+        };
+        fetchUsuarios();
+    }, [usuario]);
+
     const cargarEncuestaExistente = async (id: number) => {
         setCargandoDatos(true);
         try {
@@ -150,7 +168,7 @@ const CrearEncuesta = () => {
                 mensaje_error: p.configuracion_json?.mensaje_error || '',
                 descripcion: p.configuracion_json?.descripcion || '',
                 // Mapeo inverso de matriz si existe
-                columnas_matriz: p.configuracion_json?.columnas?.map((c:any) => c.texto) || [],
+                columnas_matriz: p.configuracion_json?.columnas?.map((c: any) => c.texto) || [],
                 // Si es matriz, las filas suelen guardarse en config o en opciones, aquí asumimos opciones
                 opciones: p.opciones.map((o: any) => ({
                     texto_opcion: o.texto_opcion,
@@ -412,7 +430,7 @@ const CrearEncuesta = () => {
                     <Box display="flex" gap={1}>
                         {esEditable && (
                             <Tooltip title="Guardar de forma manual">
-                            <IconButton size="small" onClick={handleSubmit(handleSubmitGuardar, onError)} color="primary"><CloudUploadIcon /></IconButton>
+                                <IconButton size="small" onClick={handleSubmit(handleSubmitGuardar, onError)} color="primary"><CloudUploadIcon /></IconButton>
                             </Tooltip>
                         )}
                         <Tooltip title="Descartar cambios"><IconButton size="small" onClick={onDescartar} color="error"><CloseIcon /></IconButton></Tooltip>
@@ -463,10 +481,32 @@ const CrearEncuesta = () => {
                         < Grid size={{ xs: 12, md: 6 }}>
                             <Box display="flex" alignItems="center" gap={2} mb={2}>
                                 <Typography variant="body2" fontWeight="bold" width={100}>Responsable</Typography>
-                                <Chip
-                                    avatar={<Avatar>{usuario?.sub?.charAt(0)}</Avatar>}
-                                    label={usuario?.sub}
-                                    variant="outlined"
+                                <Controller
+                                    name="responsable"
+                                    control={control}
+                                    render={({ field }) => (
+                                        <TextField
+                                            {...field}
+                                            select
+                                            size="small"
+                                            variant="outlined"
+                                            sx={{ minWidth: 200 }}
+                                            disabled={!esEditable}
+                                            label={field.value ? "" : "Seleccionar usuario"}
+                                            InputLabelProps={{ shrink: false }} // Fix label overlapping if empty
+                                        >
+                                            {usuariosDisponibles.map((u) => (
+                                                <MenuItem key={u.id_admin || u.nombre_usuario} value={u.nombre_usuario}>
+                                                    <Box display="flex" alignItems="center" gap={1}>
+                                                        <Avatar sx={{ width: 24, height: 24, fontSize: 12 }}>
+                                                            {(u.nombre_usuario || '').charAt(0).toUpperCase()}
+                                                        </Avatar>
+                                                        {u.nombre_usuario}
+                                                    </Box>
+                                                </MenuItem>
+                                            ))}
+                                        </TextField>
+                                    )}
                                 />
                             </Box>
                             {/* Constructor de Reglas Avanzadas */}
@@ -512,25 +552,7 @@ const CrearEncuesta = () => {
                                 />
                             </Box>
 
-                            {/* Fechas de Inicio y Fin */}
-                            <Box display="flex" gap={2} mt={2}>
-                                <TextField
-                                    label="Inicio"
-                                    type="datetime-local"
-                                    fullWidth
-                                    InputLabelProps={{ shrink: true }}
-                                    {...register("fecha_inicio", { required: true })}
-                                    disabled={!esEditable}
-                                />
-                                <TextField
-                                    label="Fin"
-                                    type="datetime-local"
-                                    fullWidth
-                                    InputLabelProps={{ shrink: true }}
-                                    {...register("fecha_fin", { required: true })}
-                                    disabled={!esEditable}
-                                />
-                            </Box>
+
                         </Grid >
 
                         {/* Radio Buttons (Público Objetivo) */}
