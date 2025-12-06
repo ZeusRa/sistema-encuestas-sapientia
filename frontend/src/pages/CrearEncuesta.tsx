@@ -26,6 +26,7 @@ import { usarAuthStore } from '../context/authStore';
 import { useDebounce } from '../hooks/useDebounce'; // Asegurarse de tener este hook o implementarlo
 
 import ModalPregunta, { type PreguntaFrontend } from '../components/ModalPregunta';
+import ConstructorReglas, { ReglaRestriccion } from '../components/ConstructorReglas';
 
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 
@@ -34,7 +35,8 @@ interface FormularioEncuesta {
     titulo: string;
     publico_objetivo: 'alumnos' | 'docentes' | 'ambos';
     responsable: string;
-    restringido_a?: string; // Lista negra 
+    restringido_a?: string; // Legacy o display string
+    filtros_json?: ReglaRestriccion[]; // Nuevo campo estructurado
     prioridad: 'obligatoria' | 'opcional' | 'evaluacion_docente';
     acciones_disparadoras: string[];
     configuracion: {
@@ -85,7 +87,8 @@ const CrearEncuesta = () => {
                 paginacion: 'por_pregunta',
                 mostrar_progreso: 'porcentaje',
                 permitir_saltar: true
-            }
+            },
+            filtros_json: []
         }
     });
 
@@ -132,6 +135,10 @@ const CrearEncuesta = () => {
 
             if (data.reglas && data.reglas.length > 0) {
                 setValue("publico_objetivo", data.reglas[0].publico_objetivo);
+                // Cargar reglas avanzadas si existen
+                if (data.reglas[0].filtros_json) {
+                    setValue("filtros_json", data.reglas[0].filtros_json);
+                }
             }
 
             const preguntasMapeadas: PreguntaFrontend[] = data.preguntas.map((p: any) => ({
@@ -275,7 +282,10 @@ const CrearEncuesta = () => {
                 configuracion: data.configuracion,
                 activo: true,
                 estado: estado,
-                reglas: [{ publico_objetivo: data.publico_objetivo }],
+                reglas: [{
+                    publico_objetivo: data.publico_objetivo,
+                    filtros_json: data.filtros_json // Enviamos las reglas estructuradas
+                }],
                 descripcion: data.descripcion,
                 mensaje_final: data.mensaje_final,
                 preguntas: preguntas.map((p, index) => ({
@@ -459,14 +469,46 @@ const CrearEncuesta = () => {
                                     variant="outlined"
                                 />
                             </Box>
-                            <Box display="flex" alignItems="center" gap={2}>
-                                <Typography variant="body2" fontWeight="bold" width={100}>Restringido a</Typography>
+                            {/* Constructor de Reglas Avanzadas */}
+                            <Box mt={2}>
+                                <Typography variant="subtitle2" fontWeight="bold" mb={1}>Restringido a (Reglas Avanzadas)</Typography>
+                                {esEditable ? (
+                                    <Controller
+                                        name="filtros_json"
+                                        control={control}
+                                        render={({ field }) => (
+                                            <ConstructorReglas
+                                                reglas={field.value || []}
+                                                onChange={field.onChange}
+                                            />
+                                        )}
+                                    />
+                                ) : (
+                                    <Typography variant="body2" color="text.secondary">
+                                        {(watch('filtros_json') || []).length > 0
+                                            ? `${(watch('filtros_json') || []).length} reglas definidas`
+                                            : "Sin restricciones adicionales"}
+                                    </Typography>
+                                )}
+                            </Box>
+
+                            {/* Fechas de Inicio y Fin */}
+                            <Box display="flex" gap={2} mt={2}>
                                 <TextField
-                                    placeholder="Ej: Facultad de Ingeniería"
-                                    variant="standard"
+                                    label="Inicio"
+                                    type="datetime-local"
                                     fullWidth
+                                    InputLabelProps={{ shrink: true }}
+                                    {...register("fecha_inicio", { required: true })}
                                     disabled={!esEditable}
-                                    {...register("restringido_a")}
+                                />
+                                <TextField
+                                    label="Fin"
+                                    type="datetime-local"
+                                    fullWidth
+                                    InputLabelProps={{ shrink: true }}
+                                    {...register("fecha_fin", { required: true })}
+                                    disabled={!esEditable}
                                 />
                             </Box>
 
