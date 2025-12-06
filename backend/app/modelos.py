@@ -232,15 +232,15 @@ class AsignacionUsuario(Base):
         # Dado que no podemos usar sintaxis específica de PG15 fácilmente en SQLAlchemy core abstraction sin raw DDL,
         # definimos la constraint estándar. Si id_referencia_contexto es NULL, permitir duplicados es el comportamiento PG < 15.
         # Pero el DDL script usa NULLS NOT DISTINCT. Aquí solo reflejamos la intención.
-        UniqueConstraint('id_usuario', 'id_encuesta', 'id_referencia_contexto', name='uq_usuario_encuesta_contexto'),
+        UniqueConstraint('id_usuario', 'id_encuesta', name='uq_usuario_encuesta_contexto'),
         {"schema": "encuestas_oltp"}
     )
 
     id = Column(Integer, primary_key=True)
     id_usuario = Column(Integer, nullable=False, index=True) # ID externo
     id_encuesta = Column(Integer, ForeignKey("encuestas_oltp.encuesta.id"), nullable=False)
-    id_referencia_contexto = Column(String(255), nullable=True)
-    metadatos_asignacion = Column(JSONB, default={}, nullable=False)
+
+
     estado = Column(Enum(EstadoAsignacion, schema="encuestas_oltp"), default=EstadoAsignacion.pendiente, index=True)
     fecha_asignacion = Column(DateTime(timezone=True), server_default=func.now())
     fecha_realizacion = Column(DateTime(timezone=True), nullable=True)

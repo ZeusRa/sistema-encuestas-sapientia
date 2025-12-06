@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { 
-  Box, Toolbar, AppBar, IconButton, Typography, Drawer, List, 
+import {
+  Box, Toolbar, AppBar, IconButton, Typography, Drawer, List,
   ListItem, ListItemButton, ListItemIcon, ListItemText, Divider, Avatar, Menu, MenuItem, Collapse
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
@@ -16,6 +16,7 @@ import PeopleIcon from '@mui/icons-material/People';
 import SecurityIcon from '@mui/icons-material/Security';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import SignalWifiOffIcon from '@mui/icons-material/SignalWifiOff';
+import ScienceIcon from '@mui/icons-material/Science';
 import { toast } from 'react-toastify';
 import { useEffect } from 'react';
 import api from '../api/axios';
@@ -40,18 +41,18 @@ const LayoutDashboard = () => {
       try {
         await api.get('/'); // Endpoint ligero
         if (desconectado) {
-            setDesconectado(false);
-            toast.dismiss("toast-desconexion");
-            toast.success("Conexión restablecida");
+          setDesconectado(false);
+          toast.dismiss("toast-desconexion");
+          toast.success("Conexión restablecida");
         }
       } catch (error) {
         if (!desconectado) {
-            setDesconectado(true);
-            toast.error("Sin conexión con el servidor. Funcionalidad limitada.", {
-                autoClose: false,
-                toastId: "toast-desconexion",
-                icon: <SignalWifiOffIcon />
-            });
+          setDesconectado(true);
+          toast.error("Sin conexión con el servidor. Funcionalidad limitada.", {
+            autoClose: false,
+            toastId: "toast-desconexion",
+            icon: <SignalWifiOffIcon />
+          });
         }
       }
     };
@@ -99,7 +100,7 @@ const LayoutDashboard = () => {
       <List>
         {menuItems.map((item) => (
           <ListItem key={item.texto} disablePadding>
-            <ListItemButton 
+            <ListItemButton
               onClick={() => navegar(item.ruta)}
               selected={location.pathname === item.ruta}
               sx={{
@@ -119,37 +120,37 @@ const LayoutDashboard = () => {
 
         {/* Menú Encuestas con Submenús */}
         <ListItem disablePadding onClick={() => setEncuestasOpen(!encuestasOpen)}>
-            <ListItemButton sx={{ '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}>
+          <ListItemButton sx={{ '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}>
             <ListItemIcon sx={{ color: 'inherit' }}>
-                <PollIcon />
+              <PollIcon />
             </ListItemIcon>
             <ListItemText primary="Encuestas" />
             {encuestasOpen ? <ExpandLess /> : <ExpandMore />}
-            </ListItemButton>
+          </ListItemButton>
         </ListItem>
         <Collapse in={encuestasOpen} timeout="auto" unmountOnExit>
-            <List component="div" disablePadding>
+          <List component="div" disablePadding>
             <ListItemButton
-                sx={{ pl: 4, '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}
-                onClick={() => navegar('/encuestas')}
-                selected={location.pathname === '/encuestas'}
+              sx={{ pl: 4, '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}
+              onClick={() => navegar('/encuestas')}
+              selected={location.pathname === '/encuestas'}
             >
-                <ListItemIcon sx={{ color: 'inherit' }}>
+              <ListItemIcon sx={{ color: 'inherit' }}>
                 <PollIcon fontSize='small' />
-                </ListItemIcon>
-                <ListItemText primary="Todas" />
+              </ListItemIcon>
+              <ListItemText primary="Todas" />
             </ListItemButton>
             <ListItemButton
-                sx={{ pl: 4, '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}
-                onClick={() => navegar('/encuestas/plantillas')}
-                selected={location.pathname === '/encuestas/plantillas'}
+              sx={{ pl: 4, '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}
+              onClick={() => navegar('/encuestas/plantillas')}
+              selected={location.pathname === '/encuestas/plantillas'}
             >
-                <ListItemIcon sx={{ color: 'inherit' }}>
-                <ListAltIcon fontSize='small'/>
-                </ListItemIcon>
-                <ListItemText primary="Plantillas" />
+              <ListItemIcon sx={{ color: 'inherit' }}>
+                <ListAltIcon fontSize='small' />
+              </ListItemIcon>
+              <ListItemText primary="Plantillas" />
             </ListItemButton>
-            </List>
+          </List>
         </Collapse>
 
         {/* Menú de Configuración - Solo Administradores */}
@@ -187,6 +188,17 @@ const LayoutDashboard = () => {
                   </ListItemIcon>
                   <ListItemText primary="Permisos" />
                 </ListItemButton>
+
+                <ListItemButton
+                  sx={{ pl: 4, '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}
+                  onClick={() => navegar('/admin/tecnico')}
+                  selected={location.pathname === '/admin/tecnico'}
+                >
+                  <ListItemIcon sx={{ color: 'inherit' }}>
+                    <ScienceIcon />
+                  </ListItemIcon>
+                  <ListItemText primary="Técnico" />
+                </ListItemButton>
               </List>
             </Collapse>
           </>
@@ -208,16 +220,16 @@ const LayoutDashboard = () => {
               {menuItems.find(m => m.ruta === location.pathname)?.texto || 'Inicio'}
             </Typography>
             {desconectado && (
-                <Chip
-                    icon={<SignalWifiOffIcon />}
-                    label="Desconectado"
-                    color="error"
-                    size="small"
-                    variant="outlined"
-                />
+              <Chip
+                icon={<SignalWifiOffIcon />}
+                label="Desconectado"
+                color="error"
+                size="small"
+                variant="outlined"
+              />
             )}
           </Box>
-          
+
           {/* Info Usuario */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <IconButton onClick={handleAbrirMenuUsuario} sx={{ p: 0 }}>
@@ -226,9 +238,9 @@ const LayoutDashboard = () => {
               </Avatar>
             </IconButton>
             <Typography
-                variant="body2"
-                sx={{ ml: 1, mr: 1, display: { xs: 'none', md: 'block' }, cursor: 'pointer' }}
-                onClick={handleAbrirMenuUsuario}
+              variant="body2"
+              sx={{ ml: 1, mr: 1, display: { xs: 'none', md: 'block' }, cursor: 'pointer' }}
+              onClick={handleAbrirMenuUsuario}
             >
               {usuario?.sub}
             </Typography>
@@ -251,14 +263,14 @@ const LayoutDashboard = () => {
             >
               <MenuItem onClick={handleIrACambiarClave}>
                 <ListItemIcon>
-                    <LockResetIcon fontSize="small" />
+                  <LockResetIcon fontSize="small" />
                 </ListItemIcon>
                 <ListItemText>Cambiar Clave</ListItemText>
               </MenuItem>
               <Divider />
               <MenuItem onClick={handleCerrarSesion}>
                 <ListItemIcon>
-                    <LogoutIcon fontSize="small" />
+                  <LogoutIcon fontSize="small" />
                 </ListItemIcon>
                 <ListItemText>Cerrar Sesión</ListItemText>
               </MenuItem>

@@ -166,7 +166,7 @@ class EncuestaBase(EsquemaBase):
     acciones_disparadoras: List[AccionDisparadora] = [] 
     configuracion: Dict[str, Any] = {}
     estado: Optional[EstadoEncuesta] = EstadoEncuesta.borrador
-    activo: bool = True
+    # activo: bool = True
 
 class EncuestaCrear(EncuestaBase):
     # Al crear encuesta, podemos enviar reglas y preguntas anidadas

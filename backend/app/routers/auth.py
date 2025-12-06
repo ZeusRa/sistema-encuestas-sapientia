@@ -84,7 +84,7 @@ def login_para_token_acceso(
         datos={
             "sub": usuario.nombre_usuario,
             "rol": usuario.rol.value,
-            "debe_cambiar_clave": usuario.debe_cambiar_clave,
+            # "debe_cambiar_clave": usuario.debe_cambiar_clave,
             "permisos": lista_permisos # Nueva claim con la lista de permisos
         },
         tiempo_expiracion=tiempo_expiracion

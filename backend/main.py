@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.database import obtener_bd, motor, Base
 from app import modelos
-from app.routers import auth, admin, sapientia, reportes, permisos, plantillas, catalogos
+from app.routers import auth, admin, sapientia, reportes, permisos, plantillas, catalogos, admin_tecnico
 
 Base.metadata.create_all(bind=motor)
 
@@ -37,6 +37,7 @@ app.include_router(reportes.router)
 app.include_router(permisos.router)
 app.include_router(plantillas.router)
 app.include_router(catalogos.router)
+app.include_router(admin_tecnico.router)
 
 @app.get("/")
 def leer_raiz():

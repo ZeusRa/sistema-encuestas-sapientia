@@ -19,16 +19,15 @@ engine = create_engine(URL_BASE_DATOS)
 
 def check_columns():
     insp = inspect(engine)
-    columns = insp.get_columns('encuesta', schema='encuestas_oltp')
-    col_names = [c['name'] for c in columns]
-    print(f"Columnas en encuesta: {col_names}")
-    
-    if 'acciones_disparadoras' in col_names and 'configuracion' in col_names:
-        print("SUCCESS: Columnas encontradas.")
-    else:
-        print("FAILURE: Faltan columnas.")
-        if 'accion_disparadora' in col_names:
-            print("WARNING: Columna antigua 'accion_disparadora' encontrada.")
+    tables = ['usuario_admin', 'encuesta', 'pregunta', 'opcion_respuesta', 'transaccion_encuesta', 'asignacion_usuario', 'permiso', 'rol_permiso', 'usuario_permiso']
+    for t in tables:
+        try:
+            columns = insp.get_columns(t, schema='encuestas_oltp')
+            col_names = sorted([c['name'] for c in columns])
+            print(f"--- TABLE: {t} ---")
+            print(f"Columns: {col_names}")
+        except Exception as e:
+            print(f"Error inspecting {t}: {e}")
 
 if __name__ == "__main__":
     try:

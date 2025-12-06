@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { 
-  Box, 
-  Button, 
-  Container, 
-  TextField, 
-  Typography, 
-  Paper, 
+import {
+  Box,
+  Button,
+  Container,
+  TextField,
+  Typography,
+  Paper,
   Alert,
   CircularProgress,
   InputAdornment,
@@ -30,8 +30,8 @@ const Login = () => {
   const { register, handleSubmit, formState: { errors } } = useForm<FormularioLogin>();
   const [cargando, setCargando] = useState(false);
   const [errorApi, setErrorApi] = useState<string | null>(null);
-  const [mostrarClave, setMostrarClave] = useState(false); 
-  
+  const [mostrarClave, setMostrarClave] = useState(false);
+
   const navegar = useNavigate();
   const iniciarSesionStore = usarAuthStore(state => state.iniciarSesion);
 
@@ -57,12 +57,12 @@ const Login = () => {
       });
 
       const { access_token } = respuesta.data;
-      
+
       // Guardar en el store global (Zustand)
       iniciarSesionStore(access_token);
-      
+
       toast.success(`¡Bienvenido de nuevo!`);
-      
+
       // Verificar si debe cambiar clave
       const decoded: any = jwtDecode(access_token);
       if (decoded.debe_cambiar_clave) {
@@ -78,6 +78,8 @@ const Login = () => {
         // Puede ser credenciales incorrectas o usuario inactivo
         const mensaje = error.response?.data?.detail || "Credenciales incorrectas o usuario inactivo.";
         setErrorApi(mensaje);
+      } else if (error.response?.status === 500) {
+        setErrorApi("Error interno del servidor (500). Contacte al administrador (Posible error de BD).");
       } else {
         setErrorApi("Error de conexión con el servidor. Intenta más tarde.");
       }
@@ -87,22 +89,22 @@ const Login = () => {
   };
 
   return (
-    <Box 
-      sx={{ 
-        minHeight: '100vh', 
-        display: 'flex', 
-        alignItems: 'center', 
+    <Box
+      sx={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: 'background.default' // Frostline Pale
       }}
     >
       <Container maxWidth="xs">
-        <Paper 
-          elevation={6} 
-          sx={{ 
-            p: 4, 
-            display: 'flex', 
-            flexDirection: 'column', 
+        <Paper
+          elevation={6}
+          sx={{
+            p: 4,
+            display: 'flex',
+            flexDirection: 'column',
             alignItems: 'center',
             borderRadius: 3,
             borderTop: 6, // Borde superior grueso
@@ -126,7 +128,7 @@ const Login = () => {
 
           {/* Formulario */}
           <Box component="form" onSubmit={handleSubmit(onSubmit)} sx={{ mt: 1, width: '100%' }}>
-            
+
             <TextField
               margin="normal"
               fullWidth
@@ -139,7 +141,7 @@ const Login = () => {
               helperText={errors.usuario ? "El usuario es requerido" : ""}
               {...register("usuario", { required: true })}
             />
-            
+
             <TextField
               margin="normal"
               fullWidth
@@ -180,7 +182,7 @@ const Login = () => {
 
           </Box>
         </Paper>
-        
+
         <Typography variant="body2" color="text.secondary" align="center" sx={{ mt: 4 }}>
           © 2025 Sistema de Encuestas UCA
         </Typography>
