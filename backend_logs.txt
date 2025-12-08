@@ -1,0 +1,117 @@
+﻿backend-sapientia  | INFO:     Will watch for changes in these directories: ['/app']
+backend-sapientia  | INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+backend-sapientia  | INFO:     Started reloader process [1] using StatReload
+backend-sapientia  | Process SpawnProcess-1:
+backend-sapientia  | Traceback (most recent call last):
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1967, in _exec_single_context
+backend-sapientia  |     self.dialect.do_execute(
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/default.py", line 951, in do_execute
+backend-sapientia  |     cursor.execute(statement, parameters)
+backend-sapientia  | psycopg2.errors.InvalidSchemaName: schema "encuestas_oltp" does not exist
+backend-sapientia  | 
+backend-sapientia  | 
+backend-sapientia  | The above exception was the direct cause of the following exception:
+backend-sapientia  | 
+backend-sapientia  | Traceback (most recent call last):
+backend-sapientia  |   File "/usr/local/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+backend-sapientia  |     self.run()
+backend-sapientia  |   File "/usr/local/lib/python3.12/multiprocessing/process.py", line 108, in run
+backend-sapientia  |     self._target(*self._args, **self._kwargs)
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/uvicorn/_subprocess.py", line 80, in subprocess_started
+backend-sapientia  |     target(sockets=sockets)
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/uvicorn/server.py", line 67, in run
+backend-sapientia  |     return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())
+backend-sapientia  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend-sapientia  |   File "/usr/local/lib/python3.12/asyncio/runners.py", line 194, in run
+backend-sapientia  |     return runner.run(main)
+backend-sapientia  |            ^^^^^^^^^^^^^^^^
+backend-sapientia  |   File "/usr/local/lib/python3.12/asyncio/runners.py", line 118, in run
+backend-sapientia  |     return self._loop.run_until_complete(task)
+backend-sapientia  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend-sapientia  |   File "/usr/local/lib/python3.12/asyncio/base_events.py", line 687, in run_until_complete
+backend-sapientia  |     return future.result()
+backend-sapientia  |            ^^^^^^^^^^^^^^^
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/uvicorn/server.py", line 71, in serve
+backend-sapientia  |     await self._serve(sockets)
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/uvicorn/server.py", line 78, in _serve
+backend-sapientia  |     config.load()
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/uvicorn/config.py", line 439, in load
+backend-sapientia  |     self.loaded_app = import_from_string(self.app)
+backend-sapientia  |                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/uvicorn/importer.py", line 19, in import_from_string
+backend-sapientia  |     module = importlib.import_module(module_str)
+backend-sapientia  |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend-sapientia  |   File "/usr/local/lib/python3.12/importlib/__init__.py", line 90, in import_module
+backend-sapientia  |     return _bootstrap._gcd_import(name[level:], package, level)
+backend-sapientia  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend-sapientia  |   File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+backend-sapientia  |   File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+backend-sapientia  |   File "<frozen importlib._bootstrap>", line 1331, in _find_and_load_unlocked
+backend-sapientia  |   File "<frozen importlib._bootstrap>", line 935, in _load_unlocked
+backend-sapientia  |   File "<frozen importlib._bootstrap_external>", line 995, in exec_module
+backend-sapientia  |   File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+backend-sapientia  |   File "/app/main.py", line 9, in <module>
+backend-sapientia  |     Base.metadata.create_all(bind=motor)
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/sqlalchemy/sql/schema.py", line 5928, in create_all
+backend-sapientia  |     bind._run_ddl_visitor(
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 3252, in _run_ddl_visitor
+backend-sapientia  |     conn._run_ddl_visitor(visitorcallable, element, **kwargs)
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 2459, in _run_ddl_visitor
+backend-sapientia  |     ).traverse_single(element)
+backend-sapientia  |       ^^^^^^^^^^^^^^^^^^^^^^^^
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/sqlalchemy/sql/visitors.py", line 661, in traverse_single
+backend-sapientia  |     return meth(obj, **kw)
+backend-sapientia  |            ^^^^^^^^^^^^^^^
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/sqlalchemy/sql/ddl.py", line 974, in visit_metadata
+backend-sapientia  |     with self.with_ddl_events(
+backend-sapientia  |          ^^^^^^^^^^^^^^^^^^^^^
+backend-sapientia  |   File "/usr/local/lib/python3.12/contextlib.py", line 137, in __enter__
+backend-sapientia  |     return next(self.gen)
+backend-sapientia  |            ^^^^^^^^^^^^^^
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/sqlalchemy/sql/ddl.py", line 888, in with_ddl_events
+backend-sapientia  |     target.dispatch.before_create(
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/sqlalchemy/event/attr.py", line 515, in __call__
+backend-sapientia  |     fn(*args, **kw)
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py", line 937, in __call__
+backend-sapientia  |     return getattr(self.target, self.name)(*arg, **kw)
+backend-sapientia  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/sqlalchemy/sql/sqltypes.py", line 1172, in _on_metadata_create
+backend-sapientia  |     t._on_metadata_create(target, bind, **kw)
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/named_types.py", line 137, in _on_metadata_create
+backend-sapientia  |     self.create(bind=bind, checkfirst=checkfirst)
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/named_types.py", line 369, in create
+backend-sapientia  |     super().create(bind, checkfirst=checkfirst)
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/named_types.py", line 56, in create
+backend-sapientia  |     bind._run_ddl_visitor(self.DDLGenerator, self, checkfirst=checkfirst)
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 2459, in _run_ddl_visitor
+backend-sapientia  |     ).traverse_single(element)
+backend-sapientia  |       ^^^^^^^^^^^^^^^^^^^^^^^^
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/sqlalchemy/sql/visitors.py", line 661, in traverse_single
+backend-sapientia  |     return meth(obj, **kw)
+backend-sapientia  |            ^^^^^^^^^^^^^^^
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/named_types.py", line 186, in visit_enum
+backend-sapientia  |     self.connection.execute(CreateEnumType(enum))
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1419, in execute
+backend-sapientia  |     return meth(
+backend-sapientia  |            ^^^^^
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/sqlalchemy/sql/ddl.py", line 187, in _execute_on_connection
+backend-sapientia  |     return connection._execute_ddl(
+backend-sapientia  |            ^^^^^^^^^^^^^^^^^^^^^^^^
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1530, in _execute_ddl
+backend-sapientia  |     ret = self._execute_context(
+backend-sapientia  |           ^^^^^^^^^^^^^^^^^^^^^^
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1846, in _execute_context
+backend-sapientia  |     return self._exec_single_context(
+backend-sapientia  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1986, in _exec_single_context
+backend-sapientia  |     self._handle_dbapi_exception(
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 2355, in _handle_dbapi_exception
+backend-sapientia  |     raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1967, in _exec_single_context
+backend-sapientia  |     self.dialect.do_execute(
+backend-sapientia  |   File "/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/default.py", line 951, in do_execute
+backend-sapientia  |     cursor.execute(statement, parameters)
+backend-sapientia  | sqlalchemy.exc.ProgrammingError: (psycopg2.errors.InvalidSchemaName) schema "encuestas_oltp" does not exist
+backend-sapientia  | 
+backend-sapientia  | [SQL: CREATE TYPE encuestas_oltp.roladmin AS ENUM ('ADMINISTRADOR', 'DIRECTIVO')]
+backend-sapientia  | (Background on this error at: https://sqlalche.me/e/20/f405)

@@ -9,17 +9,26 @@ from sqlalchemy.orm import sessionmaker
 load_dotenv()
 
 # 2. Obtener credenciales (Variables en Castellano)
-USUARIO_BD = os.getenv("BD_USUARIO", "postgres")
-CLAVE_BD = os.getenv("BD_CLAVE", "")
-SERVIDOR_BD = os.getenv("BD_SERVIDOR", "localhost")
-PUERTO_BD = os.getenv("BD_PUERTO", "5432")
-NOMBRE_BD = os.getenv("BD_NOMBRE", "postgres")
+# Priorizar DATABASE_URL para despliegues o Docker
+URL_BASE_DATOS = os.getenv("DATABASE_URL")
 
-# 3. Codificar la clave para caracteres especiales
-clave_codificada = urllib.parse.quote_plus(CLAVE_BD)
+if URL_BASE_DATOS:
+    # "Fix" para SQLAlchemy (Dialect)
+    if URL_BASE_DATOS.startswith("postgres://"):
+        URL_BASE_DATOS = URL_BASE_DATOS.replace("postgres://", "postgresql://", 1)
+else:
+    # Fallback a variables individuales (local sin docker o legacy)
+    USUARIO_BD = os.getenv("BD_USUARIO", "postgres")
+    CLAVE_BD = os.getenv("BD_CLAVE", "")
+    SERVIDOR_BD = os.getenv("BD_SERVIDOR", "localhost")
+    PUERTO_BD = os.getenv("BD_PUERTO", "5432")
+    NOMBRE_BD = os.getenv("BD_NOMBRE", "postgres")
 
-# 4. Construir URL
-URL_BASE_DATOS = f"postgresql://{USUARIO_BD}:{clave_codificada}@{SERVIDOR_BD}:{PUERTO_BD}/{NOMBRE_BD}"
+    # 3. Codificar la clave para caracteres especiales
+    clave_codificada = urllib.parse.quote_plus(CLAVE_BD)
+
+    # 4. Construir URL
+    URL_BASE_DATOS = f"postgresql://{USUARIO_BD}:{clave_codificada}@{SERVIDOR_BD}:{PUERTO_BD}/{NOMBRE_BD}"
 
 # Crear el motor de conexión
 motor = create_engine(URL_BASE_DATOS)
