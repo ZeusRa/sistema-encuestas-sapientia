@@ -244,6 +244,8 @@ class AsignacionUsuario(Base):
     estado = Column(Enum(EstadoAsignacion, schema="encuestas_oltp"), default=EstadoAsignacion.pendiente, index=True)
     fecha_asignacion = Column(DateTime(timezone=True), server_default=func.now())
     fecha_realizacion = Column(DateTime(timezone=True), nullable=True)
+    metadatos_asignacion = Column(JSONB, nullable=True)
+    id_referencia_contexto = Column(String(255), nullable=True)
 
     encuesta = relationship("Encuesta", back_populates="asignaciones")
     borrador = relationship("RespuestaBorrador", back_populates="asignacion", uselist=False, cascade="all, delete-orphan")

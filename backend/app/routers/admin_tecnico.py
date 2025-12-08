@@ -160,7 +160,7 @@ def simular_encuesta(
             # Solo agregamos si se generó algo (secciones no se responden)
             if preg.tipo != "seccion":
                 respuestas_generadas.append(
-                    schemas.RespuestaAlumno(
+                    schemas.RespuestaIndividual(
                         id_pregunta=preg.id,
                         valor_respuesta=val_resp,
                         id_opcion=id_op

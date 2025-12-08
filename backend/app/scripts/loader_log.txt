@@ -1,0 +1,6 @@
+Conectando a: ep-gentle-fire-a49shh3t-pooler.us-east-1.aws.neon.tech/db_encuestas?sslmode=require&channel_binding=require
+Cargando Oferta Académica desde Excel...
+ -> 508 registros de oferta insertados.
+Cargando Inscripciones...
+ -> 7601 inscripciones insertadas.
+¡Proceso de carga finalizado!

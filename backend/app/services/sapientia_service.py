@@ -1,13 +1,56 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-def get_alumnos_cursando(bd: Session):
+def get_alumnos_cursando(bd: Session, filtros_json: list = None):
     """
-    Retorna lista de diccionarios con info de alumnos activos.
-    Simula: SELECT * FROM sapientia.alumnos
+    Retorna lista de diccionarios con info de alumnos, aplicando filtros JIT.
+    Join: Inscripciones -> Oferta Academica (para filtrar por Campus/Sede)
     """
-    query = text("SELECT id, nombre, email, carrera FROM sapientia.alumnos")
-    result = bd.execute(query).fetchall()
+    # Base query: Join Inscripciones con Oferta para obtener datos de contexto
+    # Como no tenemos tabla de alumnos con nombres, simulamos el nombre basándonos en el ID.
+    sql = """
+        SELECT DISTINCT
+            i.id_alumno as id,
+            'Alumno ' || i.id_alumno as nombre, 
+            'alumno' || i.id_alumno || '@uc.edu.py' as email,
+            o.facultad,
+            o.departamento as carrera
+        FROM sapientia.inscripciones i
+        JOIN sapientia.oferta_academica o ON 
+            i.cod_asignatura = o.cod_asignatura AND 
+            i.seccion = o.seccion
+    """
+    
+    where_clauses = []
+    params = {}
+    
+    if filtros_json:
+        # Filtros soportados: "sede" o "campus" -> mapea a columna 'campus' en oferta
+        # "facultad" -> 'facultad'
+        # "carrera" -> 'departamento' (No existe carrera en oferta, usamos departamento)
+        for i, filtro in enumerate(filtros_json):
+            campo = filtro.get("campo").lower()
+            valor = filtro.get("valor")
+            
+            if campo in ["sede", "campus"]:
+                # Importante: manejo de case insensitive
+                where_clauses.append(f"LOWER(o.campus) = LOWER(:val_{i})")
+                params[f"val_{i}"] = valor
+                
+            elif campo == "facultad":
+                where_clauses.append(f"LOWER(o.facultad) = LOWER(:val_{i})")
+                params[f"val_{i}"] = valor
+                
+            elif campo == "carrera":
+                where_clauses.append(f"LOWER(o.departamento) = LOWER(:val_{i})")
+                params[f"val_{i}"] = valor
+
+    if where_clauses:
+        sql += " WHERE " + " AND ".join(where_clauses)
+        
+    query = text(sql)
+    result = bd.execute(query, params).fetchall()
+    
     return [
         {"id": row.id, "nombre": row.nombre, "email": row.email, "carrera": row.carrera}
         for row in result

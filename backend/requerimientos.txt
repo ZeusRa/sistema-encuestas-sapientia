@@ -12,3 +12,4 @@ pandas
 pytest
 httpx
 pytest-asyncio
+openpyxl

@@ -1,5 +1,6 @@
-from typing import List, Annotated
+from typing import List, Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 from app.database import obtener_bd
 from app import modelos, schemas
@@ -7,6 +8,7 @@ from app.routers.auth import oauth2_scheme
 from jose import JWTError, jwt
 from app.security import CLAVE_SECRETA, ALGORITMO
 from app.services import sapientia_service
+from datetime import datetime
 
 router = APIRouter(
     prefix="/admin",
@@ -145,18 +147,32 @@ def crear_encuesta_completa(
     return encuesta_guardada
 
 
-@router.get("/encuestas/", response_model=List[schemas.EncuestaSalida])
+@router.get("/encuestas/", response_model=List[schemas.EncuestaResumen])
 def listar_encuestas(
     skip: int = 0,
     limit: int = 100,
+    term: Optional[str] = None, # Parámetro de búsqueda
     bd: Session = Depends(obtener_bd),
     usuario: modelos.UsuarioAdmin = Depends(obtener_usuario_actual)
 ):
+    query = bd.query(modelos.Encuesta)
+
+    if term:
+        # Filtro ilike para búsqueda insensible a mayúsculas
+        query = query.filter(modelos.Encuesta.nombre.ilike(f"%{term}%"))
+
     encuestas = (
-        bd.query(modelos.Encuesta)
+        query
         .options(
             joinedload(modelos.Encuesta.creador),
-            joinedload(modelos.Encuesta.modificador)
+            joinedload(modelos.Encuesta.modificador),
+            # Pre-cargar relaciones ligeras esenciales para propiedades calculadas si fuera necesario, 
+            # pero para cantidad_preguntas/respuestas, si son properties en Python, aun requieren carga o subquery.
+            # OPTIMIZACION: Para evitar cargar millones de preguntas, idealmente se usaría group_by o column_property.
+            # Por ahora, al NO acceder a .preguntas en el schema Resumen, SQLAlchemy NO debería disparar el lazy load 
+            # a menos que 'cantidad_preguntas' acceda a self.preguntas.
+            joinedload(modelos.Encuesta.preguntas), 
+            joinedload(modelos.Encuesta.asignaciones)
         )
         .offset(skip)
         .limit(limit)
@@ -277,13 +293,46 @@ def publicar_encuesta(
                    crear_asignacion_si_no_existe(bd, encuesta.id, item['id_usuario'], item['id_referencia_contexto'], item['metadatos'])
 
 
-            # CASE A.2 / A.3: Opcional u Obligatoria (ALUMNOS)
+                # CASE A.2 / A.3: Opcional u Obligatoria (ALUMNOS)
             else:
-                alumnos = sapientia_service.get_alumnos_cursando(bd)
+                # Extraemos filtros si existen en la primera regla
+                filtros = None
+                if encuesta.reglas and encuesta.reglas[0].filtros_json:
+                    filtros = encuesta.reglas[0].filtros_json
+                
+                alumnos = sapientia_service.get_alumnos_cursando(bd, filtros_json=filtros)
+                
+                # Optimización: Bulk Insert
+                # Primero, obtener IDs ya existentes para evitar duplicados
+                ids_alumnos_nuevos = [a['id'] for a in alumnos]
+                if not ids_alumnos_nuevos:
+                    return encuesta
+
+                # Nota: Si quisieramos ser muy estrictos con la idempotencia en bulk, deberíamos chequear existencia masivamente.
+                # Para MVP, asumimos que si publicamos una vez, generamos todo. Si se republica, manejamos conflicto?
+                # Haremos un "INSERT IGNORE" o chequeo previo masivo.
+                
+                # Chequeo masivo de existencia
+                existentes = bd.query(modelos.AsignacionUsuario.id_usuario).filter(
+                    modelos.AsignacionUsuario.id_encuesta == encuesta.id,
+                    modelos.AsignacionUsuario.id_usuario.in_(ids_alumnos_nuevos)
+                ).all()
+                ids_existentes = {e[0] for e in existentes}
+                
+                mappings = []
                 for alu in alumnos:
-                    # Contexto simple: Solo el alumno
-                    id_contexto = f"GEN-ALU-{alu['id']}"
-                    crear_asignacion_si_no_existe(bd, encuesta.id, alu['id'], id_contexto, {"nombre_alumno": alu['nombre']})
+                    if alu['id'] not in ids_existentes:
+                        mappings.append({
+                            "id_usuario": alu['id'],
+                            "id_encuesta": encuesta.id,
+                            "id_referencia_contexto": f"GEN-ALU-{alu['id']}",
+                            "metadatos_asignacion": {"nombre_alumno": alu['nombre']},
+                            "estado": modelos.EstadoAsignacion.pendiente,
+                            "fecha_asignacion": datetime.now()
+                        })
+                
+                if mappings:
+                    bd.bulk_insert_mappings(modelos.AsignacionUsuario, mappings)
 
         # B. PUBLICO DOCENTES O AMBOS
         if encuesta.reglas[0].publico_objetivo in [modelos.PublicoObjetivo.docentes, modelos.PublicoObjetivo.ambos]:

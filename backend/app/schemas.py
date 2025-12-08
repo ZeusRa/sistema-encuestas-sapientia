@@ -178,6 +178,19 @@ class UsuarioResumen(BaseModel):
     nombre_usuario: str
     rol: RolAdmin
 
+class EncuestaResumen(EncuestaBase):
+    id: int
+    # Campos de auditoría resumidos
+    fecha_creacion: datetime
+    
+    # Datos visuales mínimos
+    creador: Optional[UsuarioResumen] = None
+    modificador: Optional[UsuarioResumen] = None
+
+    # Solo conteos, no listas completas
+    cantidad_preguntas: Optional[int] = 0
+    cantidad_respuestas: Optional[int] = 0
+
 class EncuestaSalida(EncuestaBase):
     id: int
     
