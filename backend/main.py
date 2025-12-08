@@ -6,6 +6,12 @@ from app.database import obtener_bd, motor, Base
 from app import modelos
 from app.routers import auth, admin, sapientia, reportes, permisos, plantillas, catalogos, admin_tecnico
 
+# Crear esquema si no existe
+with motor.connect() as connection:
+    connection.execute(text("CREATE SCHEMA IF NOT EXISTS encuestas_oltp"))
+    connection.execute(text("CREATE SCHEMA IF NOT EXISTS encuestas_olap"))
+    connection.commit()
+
 Base.metadata.create_all(bind=motor)
 
 app = FastAPI(

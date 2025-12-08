@@ -6,14 +6,18 @@ import urllib.parse
 # Cargar variables
 load_dotenv()
 
-USUARIO_BD = os.getenv("BD_USUARIO", "postgres")
-CLAVE_BD = os.getenv("BD_CLAVE", "")
-SERVIDOR_BD = os.getenv("BD_SERVIDOR", "localhost")
-PUERTO_BD = os.getenv("BD_PUERTO", "5432")
-NOMBRE_BD = os.getenv("BD_NOMBRE", "postgres")
+URL_BASE_DATOS = os.getenv("DATABASE_URL")
+if URL_BASE_DATOS and URL_BASE_DATOS.startswith("postgres://"):
+    URL_BASE_DATOS = URL_BASE_DATOS.replace("postgres://", "postgresql://", 1)
 
-clave_codificada = urllib.parse.quote_plus(CLAVE_BD)
-URL_BASE_DATOS = f"postgresql://{USUARIO_BD}:{clave_codificada}@{SERVIDOR_BD}:{PUERTO_BD}/{NOMBRE_BD}"
+if not URL_BASE_DATOS:
+    USUARIO_BD = os.getenv("BD_USUARIO", "postgres")
+    CLAVE_BD = os.getenv("BD_CLAVE", "")
+    SERVIDOR_BD = os.getenv("BD_SERVIDOR", "localhost")
+    PUERTO_BD = os.getenv("BD_PUERTO", "5432")
+    NOMBRE_BD = os.getenv("BD_NOMBRE", "postgres")
+    clave_codificada = urllib.parse.quote_plus(CLAVE_BD)
+    URL_BASE_DATOS = f"postgresql://{USUARIO_BD}:{clave_codificada}@{SERVIDOR_BD}:{PUERTO_BD}/{NOMBRE_BD}"
 
 engine = create_engine(URL_BASE_DATOS)
 
