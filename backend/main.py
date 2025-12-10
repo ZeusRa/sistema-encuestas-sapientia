@@ -4,42 +4,32 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.database import obtener_bd, motor, Base
 from app import modelos
-from app.routers import auth, admin, sapientia, reportes, permisos, plantillas, catalogos, admin_tecnico
-
-# Crear esquema si no existe
-with motor.connect() as connection:
-    connection.execute(text("CREATE SCHEMA IF NOT EXISTS encuestas_oltp"))
-    connection.execute(text("CREATE SCHEMA IF NOT EXISTS encuestas_olap"))
-    connection.commit()
+from app.routers import auth, admin, sapientia, reportes, permisos, plantillas, catalogos, admin_tecnico, reportes_avanzados
 
 Base.metadata.create_all(bind=motor)
 
-app = FastAPI(
-    title="Sistema de Encuestas API",
-    description="Backend para la gestión de encuestas y bloqueo de inscripciones de Sapientia.",
-    version="1.0.0"
-)
+app = FastAPI(title="Sistema de Encuestas Sapientia")
 
-# --- CONFIGURACIÓN CORS ---
-# Permitir que el frontend (React) hable con el backend
 origins = [
-    "http://localhost:5173",      # Vite default
+    "http://localhost:5173",
+    "http://localhost:3000",
     "http://127.0.0.1:5173",
-    "http://localhost:3000",      # React clásico
+    "*"
 ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,        # Qué dominios pueden conectar
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],          # Permitir todos los métodos (GET, POST, etc.)
-    allow_headers=["*"],          # Permitir todos los headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
-# ---------------------------
 
 app.include_router(auth.router)
 app.include_router(admin.router) 
 app.include_router(sapientia.router)
 app.include_router(reportes.router)
+app.include_router(reportes_avanzados.router)
 app.include_router(permisos.router)
 app.include_router(plantillas.router)
 app.include_router(catalogos.router)

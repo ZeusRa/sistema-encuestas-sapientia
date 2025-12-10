@@ -61,6 +61,7 @@ def get_asignaturas(
     campus: Optional[str] = Query(None),
     facultad: Optional[str] = Query(None),
     carrera: Optional[str] = Query(None),
+    docente: Optional[str] = Query(None),
     bd: Session = Depends(obtener_bd)
 ):
     sql = """
@@ -78,6 +79,9 @@ def get_asignaturas(
     if carrera:
         sql += " AND departamento = :carrera"
         params["carrera"] = carrera
+    if docente:
+        sql += " AND docente = :docente"
+        params["docente"] = docente
         
     sql += " ORDER BY asignatura, seccion"
     
@@ -86,6 +90,30 @@ def get_asignaturas(
         {"codigo": r[0], "nombre": r[1], "seccion": r[2]} 
         for r in rows
     ]
+
+@router.get("/docentes", response_model=List[str])
+def get_docentes(
+    campus: Optional[str] = Query(None),
+    facultad: Optional[str] = Query(None),
+    carrera: Optional[str] = Query(None),
+    bd: Session = Depends(obtener_bd)
+):
+    sql = "SELECT DISTINCT docente FROM sapientia.oferta_academica WHERE docente IS NOT NULL"
+    params = {}
+    if campus:
+        sql += " AND campus = :campus"
+        params["campus"] = campus
+    if facultad:
+        sql += " AND facultad = :facultad"
+        params["facultad"] = facultad
+    if carrera:
+        sql += " AND departamento = :carrera"
+        params["carrera"] = carrera
+        
+    sql += " ORDER BY docente"
+    
+    rows = bd.execute(text(sql), params).fetchall()
+    return [r[0] for r in rows if r[0]]
 
 @router.get("/alumnos", response_model=List[dict])
 def get_alumnos_contexto(

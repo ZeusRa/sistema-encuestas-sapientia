@@ -250,3 +250,21 @@ class DashboardStats(BaseModel):
     total_encuestas_completadas: int
     total_respuestas_procesadas: int
     ultime_actualizacion_etl: Optional[datetime] = None
+
+class ReporteTablaRespuesta(BaseModel):
+    id_hecho: int
+    fecha: str
+    texto_pregunta: str
+    nombre_encuesta: str
+    respuesta_texto: str
+    facultad: Optional[str] = None
+    carrera: Optional[str] = None
+    asignatura: Optional[str] = None
+
+class ReporteNubePalabras(BaseModel):
+    text: str
+    value: int
+
+class ReporteDistribucion(BaseModel):
+    pregunta: str
+    opciones: Dict[str, float] # {"Opción A": 20.0, "Opción B": 80.0}

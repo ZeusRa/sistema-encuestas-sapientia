@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   Box, Toolbar, AppBar, IconButton, Typography, Drawer, List,
-  ListItem, ListItemButton, ListItemIcon, ListItemText, Divider, Avatar, Menu, MenuItem, Collapse
+  ListItem, ListItemButton, ListItemIcon, ListItemText, Divider, Avatar, Menu, MenuItem, Collapse, Chip
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import LogoutIcon from '@mui/icons-material/Logout';
@@ -17,6 +17,7 @@ import SecurityIcon from '@mui/icons-material/Security';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import SignalWifiOffIcon from '@mui/icons-material/SignalWifiOff';
 import ScienceIcon from '@mui/icons-material/Science';
+import BarChartIcon from '@mui/icons-material/BarChart';
 import { toast } from 'react-toastify';
 import { useEffect } from 'react';
 import api from '../api/axios';
@@ -84,6 +85,7 @@ const LayoutDashboard = () => {
 
   const menuItems = [
     { texto: 'Dashboard', icono: <DashboardIcon />, ruta: '/dashboard' },
+    { texto: 'Analítica', icono: <BarChartIcon />, ruta: '/reportes/avanzados' },
   ];
 
   const drawerContent = (

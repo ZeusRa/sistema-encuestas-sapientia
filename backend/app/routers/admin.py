@@ -1,5 +1,5 @@
 from typing import List, Annotated, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 from app.database import obtener_bd
@@ -152,6 +152,7 @@ def listar_encuestas(
     skip: int = 0,
     limit: int = 100,
     term: Optional[str] = None, # Parámetro de búsqueda
+    estados: Annotated[Optional[List[modelos.EstadoEncuesta]], Query()] = None, # Nuevo filtro de estados
     bd: Session = Depends(obtener_bd),
     usuario: modelos.UsuarioAdmin = Depends(obtener_usuario_actual)
 ):
@@ -160,6 +161,9 @@ def listar_encuestas(
     if term:
         # Filtro ilike para búsqueda insensible a mayúsculas
         query = query.filter(modelos.Encuesta.nombre.ilike(f"%{term}%"))
+    
+    if estados:
+        query = query.filter(modelos.Encuesta.estado.in_(estados))
 
     encuestas = (
         query

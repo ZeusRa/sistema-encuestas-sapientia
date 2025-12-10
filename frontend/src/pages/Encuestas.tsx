@@ -67,32 +67,37 @@ const Encuestas = () => {
 
   // Acciones de Navegación
   const irAEdicion = (id: number) => navigate(`/encuestas/crear?id=${id}`); // Modo edición (usaremos query param o ruta dinámica)
-  const irAResultados = (id: number) => navigate(`/encuestas/resultados/${id}`); // Nueva ruta futura
+  const irAResultados = (id: number) => {
+    const encuesta = encuestas.find(e => e.id === id);
+    if (encuesta) {
+      navigate(`/reportes/avanzados?encuesta=${encodeURIComponent(encuesta.nombre)}`);
+    }
+  };
 
   // Acciones (Duplicar, Eliminar)
   const handleDuplicar = async (id: number) => {
-      try {
-          const res = await api.post(`/admin/encuestas/${id}/duplicar`);
-          navigate(`/encuestas/crear?id=${res.data.id}`); // Ir a la copia
-      } catch (error) {
-          console.error("Error duplicando", error);
-      }
+    try {
+      const res = await api.post(`/admin/encuestas/${id}/duplicar`);
+      navigate(`/encuestas/crear?id=${res.data.id}`); // Ir a la copia
+    } catch (error) {
+      console.error("Error duplicando", error);
+    }
   };
 
   const handleEliminar = async (id: number) => {
-      if (!confirm("¿Estás seguro de eliminar esta encuesta?")) return;
-      try {
-          await api.delete(`/admin/encuestas/${id}`);
-          // Recargar lista
-          setEncuestas(prev => prev.filter(e => e.id !== id));
-      } catch (error) {
-          console.error("Error eliminando", error);
-          alert("No se puede eliminar la encuesta (probablemente no esté en borrador).");
-      }
+    if (!confirm("¿Estás seguro de eliminar esta encuesta?")) return;
+    try {
+      await api.delete(`/admin/encuestas/${id}`);
+      // Recargar lista
+      setEncuestas(prev => prev.filter(e => e.id !== id));
+    } catch (error) {
+      console.error("Error eliminando", error);
+      alert("No se puede eliminar la encuesta (probablemente no esté en borrador).");
+    }
   };
 
   const handleProbar = (id: number) => {
-      window.open(`/encuestas/prueba/${id}`, '_blank');
+    window.open(`/encuestas/prueba/${id}`, '_blank');
   };
 
   return (

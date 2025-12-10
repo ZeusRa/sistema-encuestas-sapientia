@@ -31,7 +31,7 @@ else:
     URL_BASE_DATOS = f"postgresql://{USUARIO_BD}:{clave_codificada}@{SERVIDOR_BD}:{PUERTO_BD}/{NOMBRE_BD}"
 
 # Crear el motor de conexión
-motor = create_engine(URL_BASE_DATOS)
+motor = create_engine(URL_BASE_DATOS, pool_pre_ping=True)
 
 # Crear clase de Sesión
 SesionLocal = sessionmaker(autocommit=False, autoflush=False, bind=motor)

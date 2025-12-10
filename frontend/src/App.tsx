@@ -17,6 +17,7 @@ import GestionPermisos from "./pages/admin/GestionPermisos";
 import VistaPreviaEncuesta from "./pages/VistaPreviaEncuesta";
 import Plantillas from "./pages/Plantillas";
 import AdminTecnico from "./pages/admin/AdminTecnico";
+import ReportesAvanzados from "./pages/ReportesAvanzados";
 
 function App() {
   return (
@@ -52,6 +53,9 @@ function App() {
               <Route path="/admin/usuarios" element={<GestionUsuarios />} />
               <Route path="/admin/permisos" element={<GestionPermisos />} />
               <Route path="/admin/tecnico" element={<AdminTecnico />} />
+
+              {/* Rutas de Reportes */}
+              <Route path="/reportes/avanzados" element={<ReportesAvanzados />} />
 
             </Route>
           </Route>

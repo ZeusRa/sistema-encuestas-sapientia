@@ -111,3 +111,21 @@ def get_contexto_evaluacion_docente(bd: Session):
         })
         
     return asignaciones_pendientes
+
+def get_catalogos(bd: Session):
+    """
+    Retorna listas unicas de Facultades, Carreras (Departamentos) y Campus
+    para los filtros del frontend.
+    """
+    # Consulta optimizada para traer todo de una vez o por partes.
+    # Por simplicidad, 3 queries distintos rápidos.
+    
+    facultades = bd.execute(text("SELECT DISTINCT facultad FROM sapientia.oferta_academica ORDER BY facultad")).fetchall()
+    carreras = bd.execute(text("SELECT DISTINCT departamento FROM sapientia.oferta_academica ORDER BY departamento")).fetchall()
+    sedes = bd.execute(text("SELECT DISTINCT campus FROM sapientia.oferta_academica ORDER BY campus")).fetchall()
+    
+    return {
+        "facultades": [r[0] for r in facultades if r[0]],
+        "carreras": [r[0] for r in carreras if r[0]], # Mapping departamento -> carrera
+        "sedes": [r[0] for r in sedes if r[0]]
+    }
