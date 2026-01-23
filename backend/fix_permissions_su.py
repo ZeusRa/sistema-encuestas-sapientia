@@ -45,6 +45,6 @@ if __name__ == "__main__":
         try:
             msg = str(e)
             print(f"FALLO al conectar o ejecutar: {msg}")
-        except:
-             print("FALLO al conectar o ejecutar (Error de codificacion en mensaje)")
+        except Exception as inner_e:
+             print(f"FALLO al conectar o ejecutar (Error de codificacion: {inner_e})")
         sys.exit(1)

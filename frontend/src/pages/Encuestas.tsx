@@ -41,9 +41,9 @@ const Encuestas = () => {
   useEffect(() => {
     const cargarEncuestas = async () => {
       try {
-        console.log("Cargando encuestas...");
+        if (import.meta.env.DEV) console.log("Cargando encuestas...");
         const respuesta = await api.get('/admin/encuestas/');
-        console.log("Respuesta API Encuestas:", respuesta.data);
+        if (import.meta.env.DEV) console.log("Respuesta API Encuestas:", respuesta.data);
 
         if (Array.isArray(respuesta.data)) {
           const datosEnriquecidos = respuesta.data.map((e: any) => ({
@@ -53,7 +53,7 @@ const Encuestas = () => {
           }));
           setEncuestas(datosEnriquecidos);
         } else {
-          console.error("Formato de respuesta inesperado:", respuesta.data);
+          if (import.meta.env.DEV) console.error("Formato de respuesta inesperado:", respuesta.data);
           setEncuestas([]);
         }
       } catch (error) {
@@ -132,11 +132,13 @@ const Encuestas = () => {
 
         {/* Derecha: Paginación y Vistas */}
         <Box display="flex" alignItems="center" gap={2}>
-          {/* Paginación Simple */}
+          {/* Paginación Corregida - Muestra rango real de items */}
           <Box display="flex" alignItems="center" color="text.secondary">
-            <Typography variant="body2" sx={{ mr: 1 }}>1-10 / {encuestas.length}</Typography>
+            <Typography variant="body2" sx={{ mr: 1 }}>
+              {encuestas.length > 0 ? `1-${encuestas.length}` : '0'} / {encuestas.length}
+            </Typography>
             <IconButton size="small" disabled><NavigateBeforeIcon /></IconButton>
-            <IconButton size="small"><NavigateNextIcon /></IconButton>
+            <IconButton size="small" disabled={encuestas.length === 0}><NavigateNextIcon /></IconButton>
           </Box>
 
           {/* Switcher de Vistas */}

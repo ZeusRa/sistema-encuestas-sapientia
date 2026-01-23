@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Box, Typography, Divider, Table, TableBody, TableCell, TableHead, TableRow } from '@mui/material';
+import { Box, Typography, Table, TableBody, TableCell, TableHead, TableRow } from '@mui/material';
 import { useReportesStore } from '../../context/useReportesStore';
 
 // Estilos para simular hoja A4 en pantalla
@@ -84,8 +84,8 @@ const ReportePreview: React.FC = () => {
                                             </TableRow>
                                         </TableHead>
                                         <TableBody>
-                                            {respuestas.slice(0, 10).map((resp, i) => (
-                                                <TableRow key={i}>
+                                            {respuestas.slice(0, 10).map((resp) => (
+                                                <TableRow key={resp.id_hecho}>
                                                     <TableCell>{resp.texto_pregunta}</TableCell>
                                                     <TableCell align="right">{resp.respuesta_texto}</TableCell>
                                                 </TableRow>

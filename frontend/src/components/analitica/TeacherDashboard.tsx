@@ -49,7 +49,7 @@ const TeacherDashboard: React.FC = () => {
     const [loading, setLoading] = useState(false);
 
     const token = localStorage.getItem('token_acceso');
-    const API_URL = 'http://localhost:8000';
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
     useEffect(() => {
         const fetchData = async () => {
@@ -63,7 +63,7 @@ const TeacherDashboard: React.FC = () => {
 
                 if (filtros.campus && filtros.campus !== 'Todos') queryParams.append('campus', filtros.campus);
                 if (filtros.facultad && filtros.facultad !== 'Todos') queryParams.append('facultad', filtros.facultad);
-                if (filtros.carrera && filtros.carrera !== 'Todos') queryParams.append('carrera', filtros.carrera);
+                if (filtros.departamento && filtros.departamento !== 'Todos') queryParams.append('departamento', filtros.departamento);
                 if (filtros.docente && filtros.docente !== 'Todos') queryParams.append('docente', filtros.docente);
                 if (filtros.asignatura && filtros.asignatura !== 'Todos') queryParams.append('asignatura', filtros.asignatura);
                 if (filtros.anho) queryParams.append('anho', String(filtros.anho));

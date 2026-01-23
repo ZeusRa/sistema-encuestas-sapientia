@@ -1,9 +1,8 @@
-from typing import List, Optional
-from fastapi import APIRouter, Depends, Query
+from typing import List, Optional, Dict, Any
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.database import obtener_bd
-from app.routers.auth import obtener_usuario_actual
 from app.routers.auth import obtener_usuario_actual
 from app import modelos as mod
 from app import schemas as sch
@@ -14,18 +13,15 @@ router = APIRouter(
     dependencies=[Depends(obtener_usuario_actual)]
 )
 
-@router.get("/campus", response_model=List[str])
-def get_campus(bd: Session = Depends(obtener_bd)):
-    """Retorna lista de Campus distintos"""
-    # Consulta optimizada a oferta_academica
+# =============================================================================
+# LOGICA DE NEGOCIO (HELPERS)
+# =============================================================================
+
+def _get_campus(bd: Session) -> List[str]:
     rows = bd.execute(text("SELECT DISTINCT campus FROM sapientia.oferta_academica ORDER BY campus")).fetchall()
     return [r[0] for r in rows if r[0]]
 
-@router.get("/facultades", response_model=List[str])
-def get_facultades(
-    campus: Optional[str] = Query(None),
-    bd: Session = Depends(obtener_bd)
-):
+def _get_facultades(bd: Session, campus: Optional[str] = None) -> List[str]:
     sql = "SELECT DISTINCT facultad FROM sapientia.oferta_academica WHERE 1=1"
     params = {}
     if campus:
@@ -36,13 +32,7 @@ def get_facultades(
     rows = bd.execute(text(sql), params).fetchall()
     return [r[0] for r in rows if r[0]]
 
-@router.get("/carreras", response_model=List[str])
-def get_carreras(
-    campus: Optional[str] = Query(None),
-    facultad: Optional[str] = Query(None),
-    bd: Session = Depends(obtener_bd)
-):
-    # Nota: Mapeamos 'departamento' como 'carrera' según aprendizajes previos
+def _get_departamentos(bd: Session, campus: Optional[str] = None, facultad: Optional[str] = None) -> List[str]:
     sql = "SELECT DISTINCT departamento FROM sapientia.oferta_academica WHERE 1=1"
     params = {}
     if campus:
@@ -56,14 +46,7 @@ def get_carreras(
     rows = bd.execute(text(sql), params).fetchall()
     return [r[0] for r in rows if r[0]]
 
-@router.get("/asignaturas", response_model=List[dict])
-def get_asignaturas(
-    campus: Optional[str] = Query(None),
-    facultad: Optional[str] = Query(None),
-    carrera: Optional[str] = Query(None),
-    docente: Optional[str] = Query(None),
-    bd: Session = Depends(obtener_bd)
-):
+def _get_asignaturas(bd: Session, campus: Optional[str] = None, facultad: Optional[str] = None, departamento: Optional[str] = None, docente: Optional[str] = None) -> List[Dict[str, Any]]:
     sql = """
         SELECT DISTINCT cod_asignatura, asignatura, seccion 
         FROM sapientia.oferta_academica 
@@ -76,9 +59,9 @@ def get_asignaturas(
     if facultad:
         sql += " AND facultad = :facultad"
         params["facultad"] = facultad
-    if carrera:
-        sql += " AND departamento = :carrera"
-        params["carrera"] = carrera
+    if departamento:
+        sql += " AND departamento = :departamento"
+        params["departamento"] = departamento
     if docente:
         sql += " AND docente = :docente"
         params["docente"] = docente
@@ -91,13 +74,7 @@ def get_asignaturas(
         for r in rows
     ]
 
-@router.get("/docentes", response_model=List[str])
-def get_docentes(
-    campus: Optional[str] = Query(None),
-    facultad: Optional[str] = Query(None),
-    carrera: Optional[str] = Query(None),
-    bd: Session = Depends(obtener_bd)
-):
+def _get_docentes(bd: Session, campus: Optional[str] = None, facultad: Optional[str] = None, departamento: Optional[str] = None) -> List[str]:
     sql = "SELECT DISTINCT docente FROM sapientia.oferta_academica WHERE docente IS NOT NULL"
     params = {}
     if campus:
@@ -106,14 +83,57 @@ def get_docentes(
     if facultad:
         sql += " AND facultad = :facultad"
         params["facultad"] = facultad
-    if carrera:
-        sql += " AND departamento = :carrera"
-        params["carrera"] = carrera
+    if departamento:
+        sql += " AND departamento = :departamento"
+        params["departamento"] = departamento
         
     sql += " ORDER BY docente"
     
     rows = bd.execute(text(sql), params).fetchall()
     return [r[0] for r in rows if r[0]]
+
+# =============================================================================
+# ENDPOINTS ESPECIFICOS
+# =============================================================================
+
+@router.get("/campus", response_model=List[str])
+def get_campus(bd: Session = Depends(obtener_bd)):
+    """Retorna lista de Campus distintos"""
+    return _get_campus(bd)
+
+@router.get("/facultades", response_model=List[str])
+def get_facultades(
+    campus: Optional[str] = Query(None),
+    bd: Session = Depends(obtener_bd)
+):
+    return _get_facultades(bd, campus)
+
+@router.get("/departamentos", response_model=List[str])
+def get_departamentos(
+    campus: Optional[str] = Query(None),
+    facultad: Optional[str] = Query(None),
+    bd: Session = Depends(obtener_bd)
+):
+    return _get_departamentos(bd, campus, facultad)
+
+@router.get("/asignaturas", response_model=List[dict])
+def get_asignaturas(
+    campus: Optional[str] = Query(None),
+    facultad: Optional[str] = Query(None),
+    departamento: Optional[str] = Query(None),
+    docente: Optional[str] = Query(None),
+    bd: Session = Depends(obtener_bd)
+):
+    return _get_asignaturas(bd, campus, facultad, departamento, docente)
+
+@router.get("/docentes", response_model=List[str])
+def get_docentes(
+    campus: Optional[str] = Query(None),
+    facultad: Optional[str] = Query(None),
+    departamento: Optional[str] = Query(None),
+    bd: Session = Depends(obtener_bd)
+):
+    return _get_docentes(bd, campus, facultad, departamento)
 
 @router.get("/alumnos", response_model=List[dict])
 def get_alumnos_contexto(
@@ -138,6 +158,45 @@ def get_alumnos_contexto(
     ]
 
 # =============================================================================
+# ENDPOINT GENERICO (Compatibilidad Frontend)
+# =============================================================================
+
+@router.get("/catalogos/{tipo}", response_model=List[str])
+def get_catalogo_generico(
+    tipo: str,
+    bd: Session = Depends(obtener_bd)
+):
+    """
+    Endpoint genérico usado por componentes legacy del Frontend (ej. ConstructorReglas).
+    Mapea el 'tipo' a la consulta específica correspondiente.
+    """
+    tipo = tipo.lower()
+
+    if tipo == "campus":
+        return _get_campus(bd)
+    
+    elif tipo == "facultad":
+        return _get_facultades(bd)
+    
+    elif tipo in ["departamento", "carrera"]:
+        return _get_departamentos(bd)
+    
+    elif tipo == "docente":
+        return _get_docentes(bd)
+    
+    elif tipo == "asignatura":
+        # Para asignaturas strings, formateamos: "Nombre (Codigo)"
+        # Reusamos la logica de get_asignaturas pero formateamos
+        raw_asig = _get_asignaturas(bd) # Retorna dicts
+        # Evitar duplicados de nombre si hay multiples secciones
+        # Pero ConstructorReglas espera string. Uniquificamos por string resultante.
+        nombres = {f"{a['nombre']} ({a['codigo']})" for a in raw_asig}
+        return sorted(list(nombres))
+
+    else:
+        return []
+
+# =============================================================================
 # ENDPOINTS DE INTEGRACIÓN (CU11 / CU07)
 # =============================================================================
 
@@ -149,16 +208,12 @@ def verificar_estado_alumno(
     """
     CU11: Sapientia consulta si el alumno tiene encuestas pendientes obligatorias/bloqueantes.
     """
-    # Buscar asignaciones pendientes obligatorias
-    # Nota: La lógica de bloqueo depende de la política. Asumimos que si hay pendiente y es obligatoria -> bloqueo.
-    # Por ahora simple: Si tiene CUALQUIER pendiente, avisamos.
-    
     asignacion = bd.query(mod.AsignacionUsuario).join(mod.Encuesta).filter(
         mod.AsignacionUsuario.id_usuario == id_alumno,
         mod.AsignacionUsuario.estado == mod.EstadoAsignacion.pendiente,
         mod.Encuesta.activo == True,
-        mod.Encuesta.estado == mod.EstadoEncuesta.en_curso
-        # Deberíamos filtrar por obligatoriedad si existiera ese flag en la asignación o encuesta
+        mod.Encuesta.estado == mod.EstadoEncuesta.en_curso,
+        mod.Encuesta.prioridad == mod.PrioridadEncuesta.obligatoria
     ).first()
 
     if asignacion:
@@ -166,7 +221,6 @@ def verificar_estado_alumno(
             "estado_bloqueo": True,
             "mensaje": f"Tienes una encuesta pendiente: {asignacion.encuesta.nombre}",
             "id_encuesta_pendiente": asignacion.id_encuesta,
-            # Podríamos devolver la encuesta completa si se requiere
             "datos_encuesta": None 
         }
     
@@ -185,38 +239,71 @@ def recibir_respuestas(
     CU07: Recibe las respuestas desde Sapientia (o Frontend simulado).
     """
     # 1. Verificar Asignación
-    # Intentamos buscar por contexto si es JIT, o por usuario/encuesta genérico
     asignacion = bd.query(mod.AsignacionUsuario).filter(
         mod.AsignacionUsuario.id_usuario == envio.id_usuario,
         mod.AsignacionUsuario.id_encuesta == envio.id_encuesta,
-        # mod.AsignacionUsuario.id_referencia_contexto == envio.id_referencia_contexto 
-        # A veces el contexto puede variar un poco o ser nulo, mejor asegurar id_usuario + id_encuesta
     ).first()
 
     if not asignacion:
-        # Si es obligatoria JIT, debería existir. Si es voluntaria publica, quizás se crea al vuelo?
-        # Por ahora fallamos si no existe asignación.
-        # raise HTTPException(status_code=404, detail="Asignación no encontrada")
-        
-        # O creamos al vuelo si es política permisiva
         pass
 
+    # QA Fix: Validación de Integridad de Datos.
+    ids_preguntas_enviadas = {r.id_pregunta for r in envio.respuestas}
+    if ids_preguntas_enviadas:
+        preguntas_validas = bd.query(mod.Pregunta.id).filter(
+            mod.Pregunta.id_encuesta == envio.id_encuesta,
+            mod.Pregunta.id.in_(ids_preguntas_enviadas)
+        ).all()
+        ids_validos = {p[0] for p in preguntas_validas}
+        
+        if len(ids_validos) != len(ids_preguntas_enviadas):
+             invalidas = ids_preguntas_enviadas - ids_validos
+             raise HTTPException(
+                 status_code=400, 
+                 detail=f"Integridad de datos fallida: Las preguntas {invalidas} no pertenecen a la encuesta {envio.id_encuesta}"
+             )
+
     # 2. Registrar Transacción
-    nueva_transaccion = mod.TransaccionEncuesta(
+    import hashlib
+    salt = "SAPIENTIA_SECRET_SALT_2025" 
+    hash_usuario = hashlib.sha256(f"{envio.id_usuario}{salt}".encode()).hexdigest()
+
+    # --- DATOS DE CONTEXTO ---
+    # Recuperamos metadatos de la asignación si existen
+    meta_asignacion = asignacion.metadatos_asignacion if (asignacion and asignacion.metadatos_asignacion) else {}
+    
+    # Contexto base del envío (app móvil/frontend)
+    contexto_final = {
+        "origen": "sapientia_api", 
+        "hash_usuario": hash_usuario, 
+        "id_referencia": envio.id_referencia_contexto,
+        **envio.metadatos_contexto
+    }
+
+    # Merge: Metadatos de asignación tienen precedencia o complementan
+    # IMPORTANTE: Mapeo de claves para ETL (etl.py espera 'profesor', 'asignatura')
+    # sapientia_service.py genera 'docente', 'materia'
+    
+    if "docente" in meta_asignacion:
+        contexto_final["profesor"] = meta_asignacion["docente"]
+    
+    if "materia" in meta_asignacion:
+        contexto_final["asignatura"] = meta_asignacion["materia"]
+        
+    # Copiamos el resto de metadatos útiles
+    for k, v in meta_asignacion.items():
+        if k not in contexto_final:
+            contexto_final[k] = v
+
+    new_trans = mod.TransaccionEncuesta(
         id_encuesta=envio.id_encuesta,
-        # id_usuario=envio.id_usuario, # OJO: Transaccion no tenia id_usuario en mi debug anterior, solo metadatos?
-        # Check BD anterior: id_transaccion, id_encuesta, fecha_..., metadatos...
-        # Guardamos usuario en metadatos para referencia ETL
-        metadatos_contexto={
-            "origen": "sapientia_api", 
-            "id_usuario": envio.id_usuario,
-            "id_referencia": envio.id_referencia_contexto,
-            **envio.metadatos_contexto
-        },
+        metadatos_contexto=contexto_final,
         procesado_etl=False
     )
-    bd.add(nueva_transaccion)
+    bd.add(new_trans)
     bd.flush()
+    
+    nueva_transaccion = new_trans # Mantener nombre variable para codigo siguiente
 
     # 3. Guardar Respuestas
     for r in envio.respuestas:
@@ -235,3 +322,91 @@ def recibir_respuestas(
     
     bd.commit()
     return {"mensaje": "Respuestas recibidas correctamente"}
+
+# =============================================================================
+# ENDPOINTS PARA BORRADOR (RF08 - Guardar Progreso Parcial)
+# =============================================================================
+
+@router.post("/guardar-borrador", status_code=200)
+def guardar_borrador(
+    request: sch.GuardarBorradorRequest,
+    bd: Session = Depends(obtener_bd)
+):
+    """
+    RF08: Guarda el progreso parcial de una encuesta como borrador.
+    El usuario puede continuar más tarde sin perder su trabajo.
+    """
+    # 1. Verificar que la asignación existe
+    asignacion = bd.query(mod.AsignacionUsuario).filter(
+        mod.AsignacionUsuario.id == request.id_asignacion
+    ).first()
+    
+    if not asignacion:
+        raise HTTPException(status_code=404, detail="Asignación no encontrada")
+    
+    # 2. Buscar o crear registro de borrador
+    borrador = bd.query(mod.RespuestaBorrador).filter(
+        mod.RespuestaBorrador.id_asignacion == request.id_asignacion
+    ).first()
+    
+    # Convertir respuestas a formato JSON serializable
+    respuestas_json = [
+        {
+            "id_pregunta": r.id_pregunta,
+            "valor_respuesta": r.valor_respuesta,
+            "id_opcion": r.id_opcion
+        }
+        for r in request.respuestas
+    ]
+    
+    if borrador:
+        # Actualizar borrador existente
+        borrador.respuestas_json = respuestas_json
+        # fecha_actualizacion se actualiza automáticamente con onupdate=func.now()
+    else:
+        # Crear nuevo borrador
+        borrador = mod.RespuestaBorrador(
+            id_asignacion=request.id_asignacion,
+            respuestas_json=respuestas_json
+        )
+        bd.add(borrador)
+    
+    bd.commit()
+    bd.refresh(borrador)
+    
+    return {
+        "mensaje": "Borrador guardado exitosamente",
+        "id_asignacion": request.id_asignacion,
+        "fecha_actualizacion": borrador.fecha_actualizacion
+    }
+
+@router.get("/borrador/{id_asignacion}", response_model=sch.BorradorResponse)
+def obtener_borrador(
+    id_asignacion: int,
+    bd: Session = Depends(obtener_bd)
+):
+    """
+    RF08: Recupera un borrador guardado previamente para continuar la encuesta.
+    """
+    borrador = bd.query(mod.RespuestaBorrador).filter(
+        mod.RespuestaBorrador.id_asignacion == id_asignacion
+    ).first()
+    
+    if not borrador:
+        raise HTTPException(status_code=404, detail="No hay borrador guardado para esta asignación")
+    
+    # Convertir JSON a objetos Pydantic
+    respuestas = [
+        sch.RespuestaIndividual(
+            id_pregunta=r["id_pregunta"],
+            valor_respuesta=r.get("valor_respuesta"),
+            id_opcion=r.get("id_opcion")
+        )
+        for r in borrador.respuestas_json
+    ]
+    
+    return sch.BorradorResponse(
+        id_asignacion=id_asignacion,
+        respuestas=respuestas,
+        fecha_actualizacion=borrador.fecha_actualizacion
+    )

@@ -1,4 +1,6 @@
 from typing import List, Annotated, Optional
+import logging
+import os
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
@@ -8,12 +10,21 @@ from app.routers.auth import oauth2_scheme
 from jose import JWTError, jwt
 from app.security import CLAVE_SECRETA, ALGORITMO
 from app.services import sapientia_service
-from datetime import datetime
+# Importar nuevo servicio de dominio
+from app.servicios.encuesta_servicio import EncuestaServicio
+from datetime import datetime, timezone
+
+# Configurar logger
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/admin",
     tags=["Administración de Encuestas"]
 )
+
+# Configuración desde variables de entorno
+BATCH_SIZE_JIT = int(os.getenv("BATCH_SIZE_JIT", "1000"))
+BATCH_SIZE_PUBLICACION = int(os.getenv("BATCH_SIZE_PUBLICACION", "1000"))
 
 # =============================================================================
 # DEPENDENCIAS DE AUTENTICACIÓN Y AUTORIZACIÓN
@@ -122,7 +133,8 @@ def crear_encuesta_completa(
             id_facultad=regla.id_facultad,
             id_carrera=regla.id_carrera,
             id_asignatura=regla.id_asignatura,
-            publico_objetivo=regla.publico_objetivo
+            publico_objetivo=regla.publico_objetivo,
+            filtros_json=regla.filtros_json
         )
         bd.add(nueva_regla)
 
@@ -215,7 +227,17 @@ def actualizar_encuesta(
     bd: Session = Depends(obtener_bd),
     usuario_actual: modelos.UsuarioAdmin = Depends(solo_administradores)
 ):
-    db_encuesta = bd.query(modelos.Encuesta).filter(modelos.Encuesta.id == encuesta_id).first()
+    print(f"DEBUG: Entering actualizar_encuesta with ID {encuesta_id}")
+    print(f"DEBUG: Payload: {encuesta_actualizada.model_dump(exclude={'reglas', 'preguntas', 'acciones_disparadoras'})}")
+    print(f"DEBUG: Reglas Payload: {encuesta_actualizada.reglas}")
+    logger.debug(f"Starting update for encuesta {encuesta_id} with row lock")
+    db_encuesta = (
+        bd.query(modelos.Encuesta)
+        # .with_for_update()  <-- REMOVIDO: Causa error 500 en SQLite (syntax error near FOR UPDATE)
+        .options(joinedload(modelos.Encuesta.preguntas))
+        .filter(modelos.Encuesta.id == encuesta_id)
+        .first()
+    )
     if not db_encuesta:
         raise HTTPException(status_code=404, detail="Encuesta no encontrada")
 
@@ -231,8 +253,12 @@ def actualizar_encuesta(
     db_encuesta.acciones_disparadoras = [a.value for a in encuesta_actualizada.acciones_disparadoras]
 
     # Reemplazar reglas y preguntas (recreación completa)
-    db_encuesta.reglas.clear()
-    db_encuesta.preguntas.clear()
+    # Reemplazar reglas y preguntas (recreación completa)
+    # Usamos delete() explícito para asegurar limpieza total y evitar problemas con el ORM session cache
+    bd.query(modelos.ReglaAsignacion).filter(modelos.ReglaAsignacion.id_encuesta == encuesta_id).delete()
+    bd.query(modelos.OpcionRespuesta).filter(modelos.OpcionRespuesta.pregunta.has(id_encuesta=encuesta_id)).delete(synchronize_session=False) # Borrar opciones de las preguntas
+    bd.query(modelos.Pregunta).filter(modelos.Pregunta.id_encuesta == encuesta_id).delete()
+    
     bd.flush()
 
     for regla in encuesta_actualizada.reglas:
@@ -241,7 +267,8 @@ def actualizar_encuesta(
             id_facultad=regla.id_facultad,
             id_carrera=regla.id_carrera,
             id_asignatura=regla.id_asignatura,
-            publico_objetivo=regla.publico_objetivo
+            publico_objetivo=regla.publico_objetivo,
+            filtros_json=regla.filtros_json
         )
         bd.add(nueva_regla)
 
@@ -275,96 +302,17 @@ def publicar_encuesta(
     """
     Cambia el estado de BORRADOR a EN_CURSO y genera asignaciones JIT si corresponde.
     """
-    encuesta = bd.query(modelos.Encuesta).filter(modelos.Encuesta.id == encuesta_id).first()
-    if not encuesta:
-        raise HTTPException(status_code=404, detail="Encuesta no encontrada")
-    
-    if encuesta.estado != modelos.EstadoEncuesta.borrador:
-        raise HTTPException(status_code=400, detail="Solo se pueden publicar encuestas en estado BORRADOR")
-
-    # --- LÓGICA DE PUBLICACIÓN ---
-    try:
-        # A. PUBLICO ALUMNOS O AMBOS
-        if encuesta.reglas[0].publico_objetivo in [modelos.PublicoObjetivo.alumnos, modelos.PublicoObjetivo.ambos]:
-            
-            # CASE A.1: Evaluación Docente (SOLO ALUMNOS)
-            if encuesta.prioridad == modelos.PrioridadEncuesta.evaluacion_docente:
-                if encuesta.reglas[0].publico_objetivo == modelos.PublicoObjetivo.ambos:
-                     raise HTTPException(status_code=400, detail="La evaluación docente no puede ser para AMBOS públicos.")
-
-                asignaciones = sapientia_service.get_contexto_evaluacion_docente(bd)
-                for item in asignaciones:
-                   crear_asignacion_si_no_existe(bd, encuesta.id, item['id_usuario'], item['id_referencia_contexto'], item['metadatos'])
-
-
-                # CASE A.2 / A.3: Opcional u Obligatoria (ALUMNOS)
-            else:
-                # Extraemos filtros si existen en la primera regla
-                filtros = None
-                if encuesta.reglas and encuesta.reglas[0].filtros_json:
-                    filtros = encuesta.reglas[0].filtros_json
-                
-                alumnos = sapientia_service.get_alumnos_cursando(bd, filtros_json=filtros)
-                
-                # Optimización: Bulk Insert
-                # Primero, obtener IDs ya existentes para evitar duplicados
-                ids_alumnos_nuevos = [a['id'] for a in alumnos]
-                if not ids_alumnos_nuevos:
-                    return encuesta
-
-                # Nota: Si quisieramos ser muy estrictos con la idempotencia en bulk, deberíamos chequear existencia masivamente.
-                # Para MVP, asumimos que si publicamos una vez, generamos todo. Si se republica, manejamos conflicto?
-                # Haremos un "INSERT IGNORE" o chequeo previo masivo.
-                
-                # Chequeo masivo de existencia
-                existentes = bd.query(modelos.AsignacionUsuario.id_usuario).filter(
-                    modelos.AsignacionUsuario.id_encuesta == encuesta.id,
-                    modelos.AsignacionUsuario.id_usuario.in_(ids_alumnos_nuevos)
-                ).all()
-                ids_existentes = {e[0] for e in existentes}
-                
-                mappings = []
-                for alu in alumnos:
-                    if alu['id'] not in ids_existentes:
-                        mappings.append({
-                            "id_usuario": alu['id'],
-                            "id_encuesta": encuesta.id,
-                            "id_referencia_contexto": f"GEN-ALU-{alu['id']}",
-                            "metadatos_asignacion": {"nombre_alumno": alu['nombre']},
-                            "estado": modelos.EstadoAsignacion.pendiente,
-                            "fecha_asignacion": datetime.now()
-                        })
-                
-                if mappings:
-                    bd.bulk_insert_mappings(modelos.AsignacionUsuario, mappings)
-
-        # B. PUBLICO DOCENTES O AMBOS
-        if encuesta.reglas[0].publico_objetivo in [modelos.PublicoObjetivo.docentes, modelos.PublicoObjetivo.ambos]:
-            
-            # CASE B.1: Evaluación Docente (PROHIBIDO)
-            if encuesta.prioridad == modelos.PrioridadEncuesta.evaluacion_docente:
-                 # Ya validado arriba si es "ambos", si es "docentes":
-                 if encuesta.reglas[0].publico_objetivo == modelos.PublicoObjetivo.docentes:
-                      raise HTTPException(status_code=400, detail="No existe evaluación docente PARA docentes.")
-
-            # CASE B.2: Generica
-            docentes = sapientia_service.get_docentes_activos(bd)
-            for doc in docentes:
-                 id_contexto = f"GEN-DOC-{doc['id']}"
-                 crear_asignacion_si_no_existe(bd, encuesta.id, doc['id'], id_contexto, {"nombre_docente": doc['nombre']})
-
-        encuesta.estado = modelos.EstadoEncuesta.en_curso
-        encuesta.usuario_modificacion = usuario.id_admin
-        bd.commit()
-        bd.refresh(encuesta)
-        return encuesta
-
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        bd.rollback()
-        print(f"Error publicando encuesta: {e}")
-        raise HTTPException(status_code=500, detail=f"Error interno al publicar: {str(e)}")
+    """
+    Cambia el estado de BORRADOR a EN_CURSO y genera asignaciones JIT si corresponde.
+    """
+    # Delegamos lógica de negocio compleja al servicio de dominio (SOLID)
+    return EncuestaServicio.publicar_encuesta(
+        db=bd,
+        encuesta_id=encuesta_id,
+        usuario_id=usuario.id_admin,
+        batch_size_jit=BATCH_SIZE_JIT,
+        batch_size_pub=BATCH_SIZE_PUBLICACION
+    )
 
 def crear_asignacion_si_no_existe(bd: Session, id_encuesta: int, id_usuario: int, id_contexto: str, metadatos: dict):
     existe = bd.query(modelos.AsignacionUsuario).filter(
@@ -396,77 +344,12 @@ def duplicar_encuesta(
     Duplica una encuesta existente, copiando todas sus configuraciones y preguntas.
     La nueva encuesta se crea en estado 'borrador'.
     """
-    # 1. Obtener la encuesta original con todas sus relaciones
-    encuesta_original = (
-        bd.query(modelos.Encuesta)
-        .options(
-            joinedload(modelos.Encuesta.reglas),
-            joinedload(modelos.Encuesta.preguntas)
-                .joinedload(modelos.Pregunta.opciones)
-        )
-        .filter(modelos.Encuesta.id == encuesta_id)
-        .first()
+
+    return EncuestaServicio.duplicar_encuesta(
+        db=bd,
+        encuesta_id=encuesta_id,
+        usuario_id=usuario_actual.id_admin
     )
-
-    if not encuesta_original:
-        raise HTTPException(status_code=404, detail="Encuesta no encontrada")
-
-    # 2. Crear el clon de la encuesta
-    nueva_encuesta = modelos.Encuesta(
-        nombre=f"{encuesta_original.nombre} - (copia)",
-        descripcion=encuesta_original.descripcion,
-        mensaje_final=encuesta_original.mensaje_final,
-        fecha_inicio=encuesta_original.fecha_inicio,
-        fecha_fin=encuesta_original.fecha_fin,
-        prioridad=encuesta_original.prioridad,
-        acciones_disparadoras=list(encuesta_original.acciones_disparadoras), # Copia de lista
-        configuracion=dict(encuesta_original.configuracion), # Copia de dict
-        estado=modelos.EstadoEncuesta.borrador,
-        activo=True, # Por defecto activa al duplicar
-        usuario_creacion=usuario_actual.id_admin
-    )
-
-    bd.add(nueva_encuesta)
-    bd.flush() # Obtener ID nuevo
-
-    # 3. Clonar Reglas
-    for regla in encuesta_original.reglas:
-        nueva_regla = modelos.ReglaAsignacion(
-            id_encuesta=nueva_encuesta.id,
-            id_facultad=regla.id_facultad,
-            id_carrera=regla.id_carrera,
-            id_asignatura=regla.id_asignatura,
-            publico_objetivo=regla.publico_objetivo
-        )
-        bd.add(nueva_regla)
-
-    # 4. Clonar Preguntas y Opciones
-    for preg in encuesta_original.preguntas:
-        # Usamos el helper existente pero mapeando manualmente ya que no recibimos schema
-        nueva_pregunta = modelos.Pregunta(
-            id_encuesta=nueva_encuesta.id,
-            texto_pregunta=preg.texto_pregunta,
-            orden=preg.orden,
-            tipo=preg.tipo,
-            configuracion_json=dict(preg.configuracion_json) if preg.configuracion_json else None,
-            activo=preg.activo
-        )
-        bd.add(nueva_pregunta)
-        bd.flush()
-
-        for opc in preg.opciones:
-            nueva_opcion = modelos.OpcionRespuesta(
-                id_pregunta=nueva_pregunta.id,
-                texto_opcion=opc.texto_opcion,
-                orden=opc.orden
-            )
-            bd.add(nueva_opcion)
-
-    bd.commit()
-
-    # 5. Retornar la nueva encuesta completa
-    bd.refresh(nueva_encuesta)
-    return nueva_encuesta
 
 @router.delete("/encuestas/{encuesta_id}", status_code=status.HTTP_204_NO_CONTENT)
 def eliminar_encuesta(

@@ -3,6 +3,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 import enum
+from datetime import datetime
 from .database import Base
 
 # =============================================================================
@@ -58,7 +59,7 @@ class UsuarioAdmin(Base):
     nombre_usuario = Column(String(50), unique=True, nullable=False)
     clave_encriptada = Column(String(255), nullable=False)
     rol = Column(Enum(RolAdmin, schema="encuestas_oltp"), nullable=False)
-    fecha_creacion = Column(DateTime, nullable=False)
+    fecha_creacion = Column(DateTime, nullable=False, default=datetime.now)
     fecha_ultimo_login = Column(DateTime, nullable=True)
     activo = Column(Boolean, default=True, nullable=False)
     debe_cambiar_clave = Column(Boolean, default=False, nullable=False)
@@ -123,7 +124,11 @@ class PlantillaOpcionDetalle(Base):
 
 class Encuesta(Base):
     __tablename__ = "encuesta"
-    __table_args__ = {"schema": "encuestas_oltp"}
+    __table_args__ = (
+        # Check constraint: fecha_fin debe ser posterior a fecha_inicio
+        # Nota: SQLAlchemy no crea automáticamente check constraints, se debe migrar con Alembic
+        {"schema": "encuestas_oltp"},
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(100), nullable=False)
@@ -232,7 +237,7 @@ class AsignacionUsuario(Base):
         # Dado que no podemos usar sintaxis específica de PG15 fácilmente en SQLAlchemy core abstraction sin raw DDL,
         # definimos la constraint estándar. Si id_referencia_contexto es NULL, permitir duplicados es el comportamiento PG < 15.
         # Pero el DDL script usa NULLS NOT DISTINCT. Aquí solo reflejamos la intención.
-        UniqueConstraint('id_usuario', 'id_encuesta', name='uq_usuario_encuesta_contexto'),
+        UniqueConstraint('id_usuario', 'id_encuesta', 'id_referencia_contexto', name='uq_usuario_encuesta_contexto'),
         {"schema": "encuestas_oltp"}
     )
 
@@ -245,7 +250,8 @@ class AsignacionUsuario(Base):
     fecha_asignacion = Column(DateTime(timezone=True), server_default=func.now())
     fecha_realizacion = Column(DateTime(timezone=True), nullable=True)
     metadatos_asignacion = Column(JSONB, nullable=True)
-    id_referencia_contexto = Column(String(255), nullable=True)
+    # Índice agregado para mejorar performance en búsquedas por contexto
+    id_referencia_contexto = Column(String(255), nullable=True, index=True)
 
     encuesta = relationship("Encuesta", back_populates="asignaciones")
     borrador = relationship("RespuestaBorrador", back_populates="asignacion", uselist=False, cascade="all, delete-orphan")

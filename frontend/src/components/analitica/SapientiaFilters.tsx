@@ -12,7 +12,7 @@ const SapientiaFilters: React.FC = () => {
     // Estados locales para las opciones de los filtros
     const [opcionesCampus, setOpcionesCampus] = useState<string[]>([]);
     const [opcionesFacultad, setOpcionesFacultad] = useState<string[]>([]);
-    const [opcionesCarrera, setOpcionesCarrera] = useState<string[]>([]);
+    const [opcionesDepartamento, setOpcionesDepartamento] = useState<string[]>([]);
     const [opcionesDocente, setOpcionesDocente] = useState<string[]>([]);
     const [opcionesAsignatura, setOpcionesAsignatura] = useState<{ codigo: string, nombre: string, seccion: string }[]>([]);
 
@@ -43,21 +43,21 @@ const SapientiaFilters: React.FC = () => {
         fetchFacultades();
     }, [filtros.campus]);
 
-    // Cargar Carreras/Departamentos (Depende de Campus, Facultad)
+    // Cargar Departamentos (Depende de Campus, Facultad)
     useEffect(() => {
-        const fetchCarreras = async () => {
+        const fetchDepartamentos = async () => {
             try {
                 const params: any = {};
                 if (filtros.campus !== 'Todos') params.campus = filtros.campus;
                 if (filtros.facultad !== 'Todos') params.facultad = filtros.facultad;
 
-                const res = await api.get('/sapientia/carreras', { params });
-                setOpcionesCarrera(res.data);
+                const res = await api.get('/sapientia/departamentos', { params });
+                setOpcionesDepartamento(res.data);
             } catch (err) {
-                console.error("Error cargando carreras", err);
+                console.error("Error cargando departamentos", err);
             }
         };
-        fetchCarreras();
+        fetchDepartamentos();
     }, [filtros.campus, filtros.facultad]);
 
     // Cargar Docentes (Depende de todo lo anterior)
@@ -67,7 +67,7 @@ const SapientiaFilters: React.FC = () => {
                 const params: any = {};
                 if (filtros.campus !== 'Todos') params.campus = filtros.campus;
                 if (filtros.facultad !== 'Todos') params.facultad = filtros.facultad;
-                if (filtros.carrera !== 'Todos') params.carrera = filtros.carrera;
+                if (filtros.departamento !== 'Todos') params.departamento = filtros.departamento;
 
                 const res = await api.get('/sapientia/docentes', { params });
                 setOpcionesDocente(res.data);
@@ -76,7 +76,7 @@ const SapientiaFilters: React.FC = () => {
             }
         };
         fetchDocentes();
-    }, [filtros.campus, filtros.facultad, filtros.carrera]);
+    }, [filtros.campus, filtros.facultad, filtros.departamento]);
 
     // Cargar Asignaturas (Depende de todo)
     useEffect(() => {
@@ -85,7 +85,7 @@ const SapientiaFilters: React.FC = () => {
                 const params: any = {};
                 if (filtros.campus !== 'Todos') params.campus = filtros.campus;
                 if (filtros.facultad !== 'Todos') params.facultad = filtros.facultad;
-                if (filtros.carrera !== 'Todos') params.carrera = filtros.carrera;
+                if (filtros.departamento !== 'Todos') params.departamento = filtros.departamento;
                 if (filtros.docente !== 'Todos') params.docente = filtros.docente;
 
                 const res = await api.get('/sapientia/asignaturas', { params });
@@ -95,20 +95,20 @@ const SapientiaFilters: React.FC = () => {
             }
         };
         fetchAsignaturas();
-    }, [filtros.campus, filtros.facultad, filtros.carrera, filtros.docente]);
+    }, [filtros.campus, filtros.facultad, filtros.departamento, filtros.docente]);
 
 
     const handleFilterChange = (key: any, value: any) => {
         if (key === 'campus') {
             setFiltro('facultad', 'Todos');
-            setFiltro('carrera', 'Todos');
+            setFiltro('departamento', 'Todos');
             setFiltro('docente', 'Todos');
             setFiltro('asignatura', 'Todos');
         } else if (key === 'facultad') {
-            setFiltro('carrera', 'Todos');
+            setFiltro('departamento', 'Todos');
             setFiltro('docente', 'Todos');
             setFiltro('asignatura', 'Todos');
-        } else if (key === 'carrera') {
+        } else if (key === 'departamento') {
             setFiltro('docente', 'Todos');
             setFiltro('asignatura', 'Todos');
         }
@@ -157,14 +157,14 @@ const SapientiaFilters: React.FC = () => {
                     />
                 </Grid>
 
-                {/* CARRERA/DEPARTAMENTO */}
+                {/* DEPARTAMENTO */}
                 <Grid size={{ xs: 12, md: 3 }}>
                     <Autocomplete
-                        options={opcionesCarrera}
-                        value={filtros.carrera !== 'Todos' ? filtros.carrera : null}
-                        onChange={(_, newValue) => handleFilterChange('carrera', newValue)}
-                        renderInput={(params) => <TextField {...params} label="Carrera / Dpto" variant="outlined" size="small" />}
-                        disabled={opcionesCarrera.length === 0}
+                        options={opcionesDepartamento}
+                        value={filtros.departamento !== 'Todos' ? filtros.departamento : null}
+                        onChange={(_, newValue) => handleFilterChange('departamento', newValue)}
+                        renderInput={(params) => <TextField {...params} label="Departamento" variant="outlined" size="small" />}
+                        disabled={opcionesDepartamento.length === 0}
                         noOptionsText="Sin opciones"
                     />
                 </Grid>
@@ -186,7 +186,7 @@ const SapientiaFilters: React.FC = () => {
                     <Autocomplete
                         options={opcionesAsignatura}
                         getOptionLabel={(option) => typeof option === 'string' ? option : `${option.nombre} (Sec. ${option.seccion})`}
-                        value={filtros.asignatura !== 'Todos' ? opcionesAsignatura.find(a => a.nombre === filtros.asignatura) || filtros.asignatura : null}
+                        value={filtros.asignatura !== 'Todos' ? (opcionesAsignatura.find(a => a.nombre === filtros.asignatura) || null) : null}
                         onChange={(_, newValue: any) => handleFilterChange('asignatura', newValue?.nombre || 'Todos')}
                         renderInput={(params) => <TextField {...params} label="Asignatura" variant="outlined" size="small" />}
                         disabled={opcionesAsignatura.length === 0}

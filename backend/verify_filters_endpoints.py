@@ -43,8 +43,8 @@ def verify():
             print(f"DEBUG: Error Content: {content}")
             try:
                 return e.code, json.loads(content)
-            except:
-                return e.code, {"raw": content}
+            except Exception as e:
+                return e.code, {"raw": content, "error": str(e)}
 
     # 2. Fetch Campus
     print("\n2. Fetching Campus...")

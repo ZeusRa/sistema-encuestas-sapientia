@@ -8,7 +8,7 @@ interface FiltrosReporte {
     semestre: 1 | 2 | '';
     campus: string;
     facultad: string;
-    carrera: string;
+    departamento: string;
     docente: string;
     asignatura: string;
     nombre_encuesta: string;
@@ -21,7 +21,7 @@ interface ReporteTablaItem {
     nombre_encuesta: string;
     respuesta_texto: string;
     facultad: string;
-    carrera: string;
+    carrera: string; // Maintain legacy name for now or update if backend sends departamento
     asignatura: string;
 }
 
@@ -46,11 +46,13 @@ interface DashboardMetrics {
     total_asignaciones: number;
     asignaciones_realizadas: number;
     asignaciones_pendientes: number;
+    encuestas_activas: number;
 }
 
 interface Catalogs {
     facultades: string[];
-    carreras: string[];
+    departamentos: string[];
+    docentes: string[];
     sedes: string[];
 }
 
@@ -77,6 +79,7 @@ interface ReportesState {
     fetchCatalogos: () => Promise<void>;
     fetchDashboardMetrics: () => Promise<void>;
     exportarCsv: () => Promise<void>;
+    exportarExcel: () => Promise<void>;
     downloadPdf: () => Promise<void>;
     limpiarFiltros: () => void;
 }
@@ -87,14 +90,14 @@ const filtrosIniciales: FiltrosReporte = {
     semestre: '',
     campus: 'Todos',
     facultad: 'Todos',
-    carrera: 'Todos',
+    departamento: 'Todos',
     docente: 'Todos',
     asignatura: 'Todos',
     nombre_encuesta: '',
 };
 
-// URL del backend (asumiendo proxy o variable de entorno, ajusta según tu config)
-const API_URL = 'http://localhost:8000';
+// URL del backend - usar variable de entorno
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export const useReportesStore = create<ReportesState>((set, get) => ({
     filtros: { ...filtrosIniciales },
@@ -103,7 +106,7 @@ export const useReportesStore = create<ReportesState>((set, get) => ({
     distribucion: [],
     encuestasDisponibles: [],
     dashboardMetrics: null,
-    catalogs: { facultades: [], carreras: [], sedes: [] },
+    catalogs: { facultades: [], departamentos: [], sedes: [], docentes: [] },
     loading: false,
     error: null,
 
@@ -147,7 +150,7 @@ export const useReportesStore = create<ReportesState>((set, get) => ({
         const token = usarAuthStore.getState().token;
         if (!token) return;
         try {
-            const res = await axios.get(`${API_URL}/reportes-avanzados/catalogos`, {
+            const res = await axios.get(`${API_URL}/reportes/catalogos`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             set({ catalogs: res.data });
@@ -162,29 +165,39 @@ export const useReportesStore = create<ReportesState>((set, get) => ({
         if (!token) return;
 
         try {
-            const params: any = {};
-            if (filtros.anho) params.anho = filtros.anho;
-            // Filtrar por ID de encuesta si tenemos el nombre (frontend logic needed to map name->id or update filter to store ID)
-            // Por ahora enviamos lo que tenemos
-
-            // Fix: Store filter stores 'nombre_encuesta'. Backend expects 'encuesta_id' ideally.
-            // We need to find the ID from the name in 'encuestasDisponibles'
-            const encuesta = get().encuestasDisponibles.find(e => e.nombre === filtros.nombre_encuesta);
-            if (encuesta) params.encuesta_id = encuesta.id;
-
             const res = await axios.get(`${API_URL}/reportes-avanzados/dashboard/kpis`, {
                 headers: { Authorization: `Bearer ${token}` },
-                params
+                params: {
+                    encuesta_id: filtros.nombre_encuesta ? undefined : undefined, // Simplificación: Dashboard global o refinar filtro ID
+                    anho: filtros.anho,
+                    semestre: filtros.semestre
+                }
             });
-            set({ dashboardMetrics: res.data });
+
+            set({
+                dashboardMetrics: {
+                    avance_global_pct: res.data.avance_global_pct,
+                    total_asignaciones: res.data.total_asignaciones,
+                    asignaciones_realizadas: res.data.asignaciones_realizadas,
+                    asignaciones_pendientes: res.data.asignaciones_pendientes,
+                    encuestas_activas: res.data.encuestas_activas
+                }
+            });
         } catch (err) {
             console.error("Error fetching KPIs", err);
         }
     },
 
     exportarCsv: async () => {
+        // Alias for exportExcel logic basically
+        await get().exportarExcel();
+    },
+
+    exportarExcel: async () => {
         const { filtros, encuestasDisponibles } = get();
         const token = usarAuthStore.getState().token;
+
+        // Intentar buscar ID por nombre o usar filtro directo si backend lo soportara
         const encuesta = encuestasDisponibles.find(e => e.nombre === filtros.nombre_encuesta);
 
         if (!encuesta) {
@@ -193,7 +206,7 @@ export const useReportesStore = create<ReportesState>((set, get) => ({
         }
 
         try {
-            const response = await axios.get(`${API_URL}/reportes-avanzados/exportar/csv`, {
+            const response = await axios.get(`${API_URL}/reportes/exportar/excel`, {
                 headers: { Authorization: `Bearer ${token}` },
                 params: { encuesta_id: encuesta.id },
                 responseType: 'blob',
@@ -202,43 +215,19 @@ export const useReportesStore = create<ReportesState>((set, get) => ({
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement('a');
             link.href = url;
-            link.setAttribute('download', `respuestas_${encuesta.id}.csv`);
+            link.setAttribute('download', `reporte_encuesta_${encuesta.id}.xlsx`);
             document.body.appendChild(link);
             link.click();
             link.remove();
         } catch (err) {
-            console.error("Error exporting CSV", err);
+            console.error("Error exporting Excel", err);
+            alert("Error al descargar Excel.");
         }
     },
 
     downloadPdf: async () => {
-        const { filtros, encuestasDisponibles } = get();
-        const token = usarAuthStore.getState().token;
-        const encuesta = encuestasDisponibles.find(e => e.nombre === filtros.nombre_encuesta);
-
-        if (!encuesta) {
-            alert("Selecciona una encuesta para generar reporte.");
-            return;
-        }
-
-        try {
-            const response = await axios.get(`${API_URL}/reportes-avanzados/exportar/pdf`, {
-                headers: { Authorization: `Bearer ${token}` },
-                params: { encuesta_id: encuesta.id },
-                responseType: 'blob',
-            });
-
-            const url = window.URL.createObjectURL(new Blob([response.data]));
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', `reporte_${encuesta.id}.pdf`);
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-        } catch (err) {
-            console.error("Error generating PDF", err);
-            alert("Error generando PDF. Verifica que el backend soporte WeasyPrint.");
-        }
+        // ... feature pending or remove ...
+        alert("Funcionalidad PDF pendiente de implementación en backend.");
     },
 
     fetchReportes: async () => {
@@ -254,14 +243,11 @@ export const useReportesStore = create<ReportesState>((set, get) => ({
             if (filtros.anho) params.anho = filtros.anho;
             if (filtros.semestre) params.semestre = filtros.semestre;
             if (filtros.facultad && filtros.facultad !== 'Todos') params.facultad = filtros.facultad;
-            if (filtros.carrera && filtros.carrera !== 'Todos') params.carrera = filtros.carrera;
+            // Rename to departamento
+            if (filtros.departamento && filtros.departamento !== 'Todos') params.departamento = filtros.departamento;
             if (filtros.docente && filtros.docente !== 'Todos') params.docente = filtros.docente;
             if (filtros.asignatura && filtros.asignatura !== 'Todos') params.asignatura = filtros.asignatura;
             if (filtros.campus && filtros.campus !== 'Todos') params.campus = filtros.campus;
-            if (filtros.facultad && filtros.facultad !== 'Todos') params.facultad = filtros.facultad;
-            if (filtros.carrera && filtros.carrera !== 'Todos') params.carrera = filtros.carrera;
-            if (filtros.docente && filtros.docente !== 'Todos') params.docente = filtros.docente;
-            if (filtros.asignatura && filtros.asignatura !== 'Todos') params.asignatura = filtros.asignatura;
             if (filtros.nombre_encuesta) params.nombre_encuesta = filtros.nombre_encuesta;
 
             const token = usarAuthStore.getState().token;

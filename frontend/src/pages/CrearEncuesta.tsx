@@ -1,14 +1,17 @@
-import { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
     Box, Typography, Button, Breadcrumbs, Link, IconButton, TextField,
     Paper, Tabs, Tab, RadioGroup, FormControlLabel, Radio,
-    Grid, Tooltip, Alert, Chip, Avatar, List, ListItem, ListItemText, ListItemIcon,
+    Grid, Tooltip, Alert, Chip, List, ListItem, ListItemText, ListItemIcon,
     CircularProgress, MenuItem
 } from '@mui/material';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload'; // Guardar manual
-import CloseIcon from '@mui/icons-material/Close';             // Descartar
-import SettingsIcon from '@mui/icons-material/Settings';       // Acciones
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import CloseIcon from '@mui/icons-material/Close';
+import SettingsIcon from '@mui/icons-material/Settings';
+import Menu from '@mui/material/Menu';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import AssessmentIcon from '@mui/icons-material/Assessment';
 import LockIcon from '@mui/icons-material/Lock';
 import DragHandleIcon from '@mui/icons-material/DragHandle';
 import EditIcon from '@mui/icons-material/Edit';
@@ -18,826 +21,340 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ViewHeadlineIcon from '@mui/icons-material/ViewHeadline';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import { useForm, Controller } from 'react-hook-form';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Controller, FormProvider } from 'react-hook-form'; // Use FormProvider
 import api from '../api/axios';
 import { toast } from 'react-toastify';
-import { usarAuthStore } from '../context/authStore';
-import { useDebounce } from '../hooks/useDebounce'; // Asegurarse de tener este hook o implementarlo
 
-import ModalPregunta, { type PreguntaFrontend } from '../components/ModalPregunta';
-import ConstructorReglas, { type ReglaRestriccion } from '../components/ConstructorReglas';
+import ModalPregunta from '../components/ModalPregunta';
+import ConstructorReglas from '../components/ConstructorReglas';
 
-import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
-
-// Tipos para el formulario
-interface FormularioEncuesta {
-    titulo: string;
-    publico_objetivo: 'alumnos' | 'docentes' | 'ambos';
-    responsable: string;
-    restringido_a?: string; // Legacy o display string
-    filtros_json?: ReglaRestriccion[]; // Nuevo campo estructurado
-    prioridad: 'obligatoria' | 'opcional' | 'evaluacion_docente';
-    acciones_disparadoras: string[];
-    configuracion: {
-        paginacion: 'por_pregunta' | 'por_seccion' | 'todas';
-        mostrar_progreso: 'porcentaje' | 'numero';
-        permitir_saltar: boolean;
-    };
-    descripcion?: string;
-    mensaje_final?: string;
-    fecha_inicio: string;
-    fecha_fin: string;
-}
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import { useEncuestaForm } from '../hooks/useEncuestaForm';
 
 const CrearEncuesta = () => {
-    const navigate = useNavigate();
-    const [searchParams] = useSearchParams();
-    const idEncuesta = searchParams.get("id");
-    const usuario = usarAuthStore(state => state.usuario);
+    // Usamos el Custom Hook (SOLID: Single Responsibility - Componente solo Renderiza)
+    const {
+        methods,
+        cargandoDatos,
+        tabActual,
+        setTabActual,
+        esNuevo,
+        estado,
+        esEditable,
+        errorValidacion,
+        setErrorValidacion,
+        usuariosDisponibles,
+        preguntas,
+        modalAbierto,
+        setModalAbierto,
+        preguntaEditando,
+        guardarDatos,
+        cambiarEstadoEncuesta,
+        accionesPregunta,
+        idEncuesta,
+        navigate
+    } = useEncuestaForm();
 
-    // Estado de la UI
-    const [cargandoDatos, setCargandoDatos] = useState(false);
-    const [tabActual, setTabActual] = useState(0);
-    const [esNuevo, setEsNuevo] = useState(true);
-    const [estado, setEstado] = useState<string>('borrador'); // borrador, en_curso, finalizada
-    const [errorValidacion, setErrorValidacion] = useState(false);
+    const { control, register, handleSubmit, formState: { errors }, watch } = methods;
 
-    // Si es nuevo o está en borrador, es editable.
-    const esEditable = esNuevo || estado === 'borrador';
+    // Menú de acciones (UI Logic pura)
+    const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+    const openMenu = Boolean(anchorEl);
+    const handleMenuClick = (event: React.MouseEvent<HTMLElement>) => setAnchorEl(event.currentTarget);
+    const handleMenuClose = () => setAnchorEl(null);
 
-    // ESTADOS PARA PREGUNTAS
-    const [modalAbierto, setModalAbierto] = useState(false);
-    const [preguntas, setPreguntas] = useState<PreguntaFrontend[]>([]);
-    const [preguntaEditando, setPreguntaEditando] = useState<PreguntaFrontend | null>(null);
-
-    // React Hook Form
-    const { control, register, handleSubmit, formState: { errors }, reset, setValue, watch } = useForm<FormularioEncuesta>({
-        defaultValues: {
-            titulo: '',
-            publico_objetivo: 'alumnos',
-            responsable: usuario?.sub || 'Admin',
-            prioridad: 'opcional',
-            acciones_disparadoras: ['al_iniciar_sesion'],
-            // Fechas por defecto: Mañana inicio del día, Pasado mañana fin del día (como placeholder válido)
-            // Backend espera ISO String.
-            fecha_inicio: new Date(new Date().setHours(0, 0, 1, 0)).toISOString().slice(0, 16),
-            fecha_fin: new Date(new Date().setHours(23, 59, 59, 0)).toISOString().slice(0, 16),
-            configuracion: {
-                paginacion: 'por_pregunta',
-                mostrar_progreso: 'porcentaje',
-                permitir_saltar: true
-            },
-            filtros_json: []
-        }
-    });
-
-    const prioridad = watch('prioridad');
-
-    // Efecto para Evaluación Docente
-    useEffect(() => {
-        if (prioridad === 'evaluacion_docente') {
-            setValue('acciones_disparadoras', ['al_inscribir_examen']);
-        }
-    }, [prioridad, setValue]);
-
-    // --- EFECTO: CARGAR DATOS SI ES EDICIÓN ---
-    useEffect(() => {
-        if (idEncuesta) {
-            setEsNuevo(false);
-            cargarEncuestaExistente(parseInt(idEncuesta));
-        }
-    }, [idEncuesta]);
-
-    // --- CARGAR USUARIOS (Para Responsable) ---
-    const [usuariosDisponibles, setUsuariosDisponibles] = useState<any[]>([]);
-    useEffect(() => {
-        const fetchUsuarios = async () => {
+    const handleAccionMenu = async (accion: 'duplicar' | 'eliminar' | 'resultados') => {
+        handleMenuClose();
+        if (accion === 'duplicar') {
             try {
-                // Intentamos cargar usuarios. Si falla (por permisos), usamos el actual.
-                const res = await api.get('/usuarios/');
-                setUsuariosDisponibles(res.data);
+                const res = await api.post(`/admin/encuestas/${idEncuesta}/duplicar`);
+                toast.success("Encuesta duplicada");
+                window.location.href = `/encuestas/crear?id=${res.data.id}`;
             } catch (error) {
-                console.warn("No se pudo cargar lista de usuarios", error);
-                if (usuario?.sub) {
-                    setUsuariosDisponibles([{ nombre_usuario: usuario.sub }]);
-                }
+                console.error(error);
+                toast.error("Error al duplicar");
             }
-        };
-        fetchUsuarios();
-    }, [usuario]);
-
-    const cargarEncuestaExistente = async (id: number) => {
-        setCargandoDatos(true);
-        try {
-            const { data } = await api.get(`/admin/encuestas/${id}`);
-            console.log("Datos cargados:", data);
-
-            setValue("titulo", data.nombre);
-            setValue("descripcion", data.descripcion || '');
-            setValue("mensaje_final", data.mensaje_final || '');
-            setEstado(data.estado || 'borrador');
-            setValue("prioridad", data.prioridad || 'opcional');
-            setValue("acciones_disparadoras", data.acciones_disparadoras || []);
-
-            // Cargar fechas (convertir ISO a formato input datetime-local: YYYY-MM-DDTHH:mm)
-            if (data.fecha_inicio) setValue("fecha_inicio", data.fecha_inicio.slice(0, 16));
-            if (data.fecha_fin) setValue("fecha_fin", data.fecha_fin.slice(0, 16));
-
-            // Cargar configuración asegurando valores por defecto
-            if (data.configuracion) {
-                setValue("configuracion.paginacion", data.configuracion.paginacion || 'por_pregunta');
-                setValue("configuracion.mostrar_progreso", data.configuracion.mostrar_progreso || 'porcentaje');
-                setValue("configuracion.permitir_saltar", data.configuracion.permitir_saltar ?? true);
+        } else if (accion === 'eliminar') {
+            if (!window.confirm("¿Estás seguro de eliminar esta encuesta?")) return;
+            try {
+                await api.delete(`/admin/encuestas/${idEncuesta}`);
+                toast.success("Encuesta eliminada");
+                navigate('/encuestas');
+            } catch (error) {
+                toast.error("No se pudo eliminar");
             }
-
-            if (data.reglas && data.reglas.length > 0) {
-                setValue("publico_objetivo", data.reglas[0].publico_objetivo);
-                // Cargar reglas avanzadas si existen
-                if (data.reglas[0].filtros_json) {
-                    setValue("filtros_json", data.reglas[0].filtros_json);
-                }
-            }
-
-            const preguntasMapeadas: PreguntaFrontend[] = data.preguntas.map((p: any) => ({
-                id_temporal: p.id,
-                texto_pregunta: p.texto_pregunta,
-                tipo: p.tipo,
-                orden: p.orden,
-                obligatoria: p.configuracion_json?.obligatoria || false,
-                mensaje_error: p.configuracion_json?.mensaje_error || '',
-                descripcion: p.configuracion_json?.descripcion || '',
-                // Mapeo inverso de matriz si existe
-                columnas_matriz: p.configuracion_json?.columnas?.map((c: any) => c.texto) || [],
-                // Si es matriz, las filas suelen guardarse en config o en opciones, aquí asumimos opciones
-                opciones: p.opciones.map((o: any) => ({
-                    texto_opcion: o.texto_opcion,
-                    orden: o.orden
-                }))
-            }));
-            // Ordenar estrictamente por el campo orden
-            setPreguntas(preguntasMapeadas.sort((a, b) => a.orden - b.orden));
-
-        } catch (error) {
-            console.error("Error cargando encuesta:", error);
-            toast.error("No se pudo cargar la encuesta");
-            navigate('/encuestas');
-        } finally {
-            setCargandoDatos(false);
+        } else if (accion === 'resultados') {
+            // watch es necesario aquí, lo sacamos de methods
+            navigate(`/reportes/avanzados?encuesta=${encodeURIComponent(watch('titulo') || '')}`);
         }
+    };
+
+    const onError = () => {
+        setErrorValidacion(true);
+        toast.error("Faltan campos obligatorios", { icon: false, style: { borderLeft: '5px solid red' } });
+    };
+
+    const onProbar = () => {
+        if (idEncuesta) window.open(`/encuestas/prueba/${idEncuesta}`, '_blank');
     };
 
     const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
         setTabActual(newValue);
     };
 
-    // --- LÓGICA DE PREGUNTAS ---
-    const abrirModalNueva = () => {
-        if (!esEditable) return;
-        setPreguntaEditando(null);
-        setModalAbierto(true);
-    };
-
-    // Abre el modal pero preconfigurado para ser tipo "seccion"
-    const abrirModalNuevaSeccion = () => {
-        if (!esEditable) return;
-        setPreguntaEditando({
-            id_temporal: Date.now(),
-            texto_pregunta: '',
-            tipo: 'seccion', // Pre-seleccionar tipo sección
-            orden: 0,
-            obligatoria: false,
-            opciones: []
-        });
-        setModalAbierto(true);
-    };
-
-    const abrirModalEdicion = (pregunta: PreguntaFrontend) => {
-        if (!esEditable) return;
-        setPreguntaEditando(pregunta);
-        setModalAbierto(true);
-    };
-
-    const guardarPreguntaLocal = (pregunta: PreguntaFrontend, crearOtra: boolean) => {
-        if (preguntaEditando && preguntas.some(p => p.id_temporal === pregunta.id_temporal)) {
-            // Actualizar existente
-            setPreguntas(prev => prev.map(p => p.id_temporal === pregunta.id_temporal ? pregunta : p));
-        } else {
-            // Crear nueva (asignar orden al final)
-            // Aseguramos que el ID temporal sea único si venimos de "Guardar y Nuevo"
-            // El modal ya genera un ID nuevo, pero validamos aquí
-            const nuevaConOrden = { ...pregunta, orden: preguntas.length + 1 };
-            setPreguntas(prev => [...prev, nuevaConOrden]);
-        }
-
-        // AUTO-SAVE IMPLÍCITO (Disparar efecto)
-        // Nota: Al actualizar estado 'preguntas', el efecto de auto-save se activará abajo
-
-        if (!crearOtra) {
-            setModalAbierto(false);
-        } else {
-            // Si es crear otra, reseteamos el estado de edición para que el modal sepa que es nueva
-            setPreguntaEditando(null);
-        }
-    };
-
-    const borrarPregunta = (id_temporal: number | string) => {
-        if (!esEditable) return;
-        const id = typeof id_temporal === 'string' ? Number(id_temporal) : id_temporal;
-        if (isNaN(id)) {
-            console.error("ID inválido para borrar:", id_temporal);
-            return;
-        }
-        if (window.confirm("¿Estás seguro de borrar este elemento?")) {
-            const nuevas = preguntas.filter(p => p.id_temporal !== id);
-            const reordenadas = nuevas.map((p, index) => ({ ...p, orden: index + 1 }));
-            setPreguntas(reordenadas);
-        }
-    };
-
-    // Manejador de Drag & Drop
-    const onDragEnd = (result: DropResult) => {
-        if (!result.destination || !esEditable) return;
-
-        const items = Array.from(preguntas);
-        const [reorderedItem] = items.splice(result.source.index, 1);
-        items.splice(result.destination.index, 0, reorderedItem);
-
-        // Actualizar orden numérico interno después del arrastre
-        const updatedItems = items.map((item, index) => ({ ...item, orden: index + 1 }));
-        setPreguntas(updatedItems);
-    };
-
-    // Lógica de Guardado (Separada del handler)
-    const guardarDatos = async (data: FormularioEncuesta, silencioso = false) => {
-        if (!silencioso) setErrorValidacion(false);
-
-        // Validaciones de Fecha
-        const inicio = new Date(data.fecha_inicio);
-        const fin = new Date(data.fecha_fin);
-        const ahora = new Date();
-        // Margen de 1 minuto para evitar errores por milisegundos al crear
-        ahora.setMinutes(ahora.getMinutes() - 1);
-
-        if (esNuevo && inicio < ahora) {
-            if (!silencioso) toast.error("La fecha de inicio no puede ser anterior a la actual.");
-            return;
-        }
-        if (fin <= inicio) {
-            if (!silencioso) toast.error("La fecha de fin debe ser posterior a la fecha de inicio.");
-            return;
-        }
-
-        if (!silencioso) console.log("Guardando...", data);
-
-        try {
-            const payload = {
-                nombre: data.titulo,
-                fecha_inicio: new Date(data.fecha_inicio).toISOString(),
-                fecha_fin: new Date(data.fecha_fin).toISOString(),
-                prioridad: data.prioridad,
-                acciones_disparadoras: data.acciones_disparadoras,
-                configuracion: data.configuracion,
-                activo: true,
-                estado: estado,
-                reglas: [{
-                    publico_objetivo: data.publico_objetivo,
-                    filtros_json: data.filtros_json // Enviamos las reglas estructuradas
-                }],
-                descripcion: data.descripcion,
-                mensaje_final: data.mensaje_final,
-                preguntas: preguntas.map((p, index) => ({
-                    texto_pregunta: p.texto_pregunta,
-                    orden: index + 1,
-                    tipo: p.tipo,
-                    configuracion_json: {
-                        obligatoria: p.obligatoria,
-                        mensaje_error: p.mensaje_error,
-                        descripcion: p.descripcion,
-                        // Mapeo de campos extra de matriz
-                        filas: p.filas, // Si existen
-                        columnas: p.columnas, // Si existen
-                        seleccion_multiple_matriz: p.seleccion_multiple_matriz
-                    },
-                    activo: true,
-                    opciones: p.opciones.map((o, i) => ({
-                        texto_opcion: o.texto_opcion,
-                        orden: i + 1
-                    }))
-                }))
-            };
-
-            if (esNuevo) {
-                const res = await api.post('/admin/encuestas/', payload);
-                if (!silencioso) toast.success("Encuesta creada exitosamente");
-                setEsNuevo(false);
-                navigate(`/encuestas/crear?id=${res.data.id}`, { replace: true });
-            } else {
-                const res = await api.put(`/admin/encuestas/${idEncuesta}`, payload);
-                if (!silencioso) toast.success("Encuesta actualizada exitosamente");
-                // Actualizar estado local con la respuesta para asegurar sincronía
-                setEstado(res.data.estado);
-            }
-        } catch (error: any) {
-            console.error(error);
-            if (!silencioso) {
-                const msj = error.response?.data?.detail || "Error al guardar la encuesta";
-                toast.error(msj);
-            }
-        }
-    };
-
-    // Handler para Submit Manual (compatible con React Hook Form)
-    const handleSubmitGuardar = (data: FormularioEncuesta) => {
-        guardarDatos(data, false);
-    };
-
-    // Auto-save Effect
-    // Escuchamos cambios en 'preguntas' y valores del formulario
-    const values = watch();
-    useEffect(() => {
-        if (!esNuevo && idEncuesta) { // Solo auto-guardar si ya existe
-            const timer = setTimeout(() => {
-                guardarDatos(values, true);
-            }, 2000); // 2 segundos de debounce
-            return () => clearTimeout(timer);
-        }
-    }, [values, preguntas]); // Dependencias: formulario y estructura preguntas
-
-    // Acciones de Estado
-    const cambiarEstadoEncuesta = async (nuevoEstado: 'publicar' | 'finalizar') => {
-        const accion = nuevoEstado === 'publicar' ? 'publicar' : 'cerrar';
-        if (!window.confirm(`¿Estás seguro de ${accion} la encuesta?`)) return;
-
-        try {
-            const endpoint = nuevoEstado === 'publicar' ? 'publicar' : 'finalizar';
-            const { data } = await api.post(`/admin/encuestas/${idEncuesta}/${endpoint}`);
-            setEstado(data.estado);
-            toast.success(`Encuesta ${accion === 'publicar' ? 'publicada' : 'cerrada'} exitosamente`);
-        } catch (error) {
-            console.error(error);
-            toast.error(`Error al ${accion} la encuesta`);
-        }
-    };
-
-    // Acción: Publicar
-    const onPublicar = async () => {
-        cambiarEstadoEncuesta('publicar');
-    };
-
-    // Acción: Finalizar
-    const onFinalizar = async () => {
-        cambiarEstadoEncuesta('finalizar');
-    };
-
-    // Acción: Probar
-    const onProbar = () => {
-        if (idEncuesta) window.open(`/encuestas/prueba/${idEncuesta}`, '_blank');
-    };
-
-    // Acción: Descartar (X)
-    const onDescartar = () => {
-        if (window.confirm("¿Estás seguro de descartar los cambios?")) {
-            reset();
-            navigate('/encuestas');
-        }
-    };
-
-    // Manejador de error de validación (para mostrar la alerta roja)
-    const onError = () => {
-        setErrorValidacion(true);
-        toast.error("Faltan campos obligatorios", { icon: false, style: { borderLeft: '5px solid red' } });
-    };
-
     if (cargandoDatos) {
         return <Box sx={{ display: 'flex', justifyContent: 'center', height: '100vh', alignItems: 'center' }}><CircularProgress /></Box>;
     }
-    return (
-        <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
 
-            {/* 1. CABECERA DE NAVEGACIÓN Y ACCIONES */}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, pb: 1, borderBottom: '1px solid #e0e0e0' }}>
-                <Box display="flex" alignItems="center" gap={2}>
-                    <Breadcrumbs separator={<NavigateNextIcon fontSize="small" />} aria-label="breadcrumb">
-                        <Link underline="hover" color="inherit" href="/encuestas">Encuestas</Link>
-                        <Typography color="text.primary">{esNuevo ? "Nuevo" : "Edición"}</Typography>
-                    </Breadcrumbs>
-                    <Chip
-                        label={esNuevo ? "Nuevo" : estado.toUpperCase().replace('_', ' ')}
-                        color={(estado === 'en_curso' || estado === 'publicado') ? 'success' : estado === 'finalizado' ? 'default' : 'warning'}
-                        size="small" sx={{ fontWeight: 'bold', borderRadius: 1 }}
-                    />
-                    <Box display="flex" gap={1}>
-                        {esEditable && (
-                            <Tooltip title="Guardar de forma manual">
-                                <IconButton size="small" onClick={handleSubmit(handleSubmitGuardar, onError)} color="primary"><CloudUploadIcon /></IconButton>
+    return (
+        <FormProvider {...methods}>
+            <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+
+                {/* 1. CABECERA */}
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, pb: 1, borderBottom: '1px solid #e0e0e0' }}>
+                    <Box display="flex" alignItems="center" gap={2}>
+                        <Breadcrumbs separator={<NavigateNextIcon fontSize="small" />} aria-label="breadcrumb">
+                            <Link underline="hover" color="inherit" href="/encuestas">Encuestas</Link>
+                            <Typography color="text.primary">{esNuevo ? "Nuevo" : "Edición"}</Typography>
+                        </Breadcrumbs>
+                        <Chip
+                            label={esNuevo ? "Nuevo" : estado.toUpperCase().replace('_', ' ')}
+                            color={(estado === 'en_curso' || estado === 'publicado') ? 'success' : estado === 'finalizado' ? 'default' : 'warning'}
+                            size="small" sx={{ fontWeight: 'bold', borderRadius: 1 }}
+                        />
+                        <Box display="flex" gap={1}>
+                            {esEditable && (
+                                <Tooltip title="Guardar cambios">
+                                    <IconButton size="small" onClick={handleSubmit((d) => guardarDatos(d, false), onError)} color="primary"><CloudUploadIcon /></IconButton>
+                                </Tooltip>
+                            )}
+                            <Tooltip title="Descartar / Salir"><IconButton size="small" onClick={() => navigate('/encuestas')} color="error"><CloseIcon /></IconButton></Tooltip>
+
+                            <Tooltip title="Acciones">
+                                <IconButton size="small" onClick={handleMenuClick}><SettingsIcon /></IconButton>
                             </Tooltip>
+                            <Menu anchorEl={anchorEl} open={openMenu} onClose={handleMenuClose}>
+                                <MenuItem onClick={onProbar} disabled={esNuevo}><ListItemIcon><PlayArrowIcon fontSize="small" /></ListItemIcon><ListItemText>Probar Encuesta</ListItemText></MenuItem>
+                                <MenuItem onClick={() => handleAccionMenu('duplicar')} disabled={esNuevo}><ListItemIcon><ContentCopyIcon fontSize="small" /></ListItemIcon><ListItemText>Duplicar</ListItemText></MenuItem>
+                                <MenuItem onClick={() => handleAccionMenu('resultados')} disabled={esNuevo}><ListItemIcon><AssessmentIcon fontSize="small" /></ListItemIcon><ListItemText>Ver Resultados</ListItemText></MenuItem>
+                                <MenuItem onClick={() => handleAccionMenu('eliminar')} disabled={esNuevo || estado !== 'borrador'} sx={{ color: 'error.main' }}>
+                                    <ListItemIcon><DeleteIcon fontSize="small" color="error" /></ListItemIcon><ListItemText>Eliminar</ListItemText>
+                                </MenuItem>
+                            </Menu>
+                        </Box>
+                    </Box>
+                    <Box display="flex" gap={1}>
+                        {!esNuevo && (
+                            <Button variant="outlined" startIcon={<PlayArrowIcon />} onClick={onProbar} sx={{ textTransform: 'none' }}>Probar</Button>
                         )}
-                        <Tooltip title="Descartar cambios"><IconButton size="small" onClick={onDescartar} color="error"><CloseIcon /></IconButton></Tooltip>
-                        <Tooltip title="Acciones"><IconButton size="small"><SettingsIcon /></IconButton></Tooltip>
+                        {!esNuevo && estado === 'borrador' && (
+                            <Button variant="contained" color="success" startIcon={<PublishIcon />} onClick={() => cambiarEstadoEncuesta('publicar')} sx={{ textTransform: 'none' }}>Publicar</Button>
+                        )}
+                        {(estado === 'en_curso' || estado === 'publicado') && (
+                            <Button variant="contained" color="warning" startIcon={<CheckCircleIcon />} onClick={() => cambiarEstadoEncuesta('finalizar')} sx={{ textTransform: 'none' }}>Cerrar Encuesta</Button>
+                        )}
+                        <Button variant="outlined" color="secondary" startIcon={<LockIcon />} onClick={() => navigate('/encuestas')} sx={{ textTransform: 'none' }}>Salir</Button>
                     </Box>
                 </Box>
-                <Box display="flex" gap={1}>
-                    {!esNuevo && (
-                        <Button variant="outlined" startIcon={<PlayArrowIcon />} onClick={onProbar} sx={{ textTransform: 'none' }}>Probar</Button>
-                    )}
-                    {!esNuevo && estado === 'borrador' && (
-                        <Button variant="contained" color="success" startIcon={<PublishIcon />} onClick={onPublicar} sx={{ textTransform: 'none' }}>Publicar</Button>
-                    )}
-                    {(estado === 'en_curso' || estado === 'publicado') && (
-                        <Button variant="contained" color="warning" startIcon={<CheckCircleIcon />} onClick={onFinalizar} sx={{ textTransform: 'none' }}>Cerrar Encuesta</Button>
-                    )}
-                    <Button variant="outlined" color="secondary" startIcon={<LockIcon />} sx={{ textTransform: 'none' }}>Salir</Button>
-                </Box>
-            </Box>
 
-            {/* 2. ALERTA DE VALIDACIÓN */}
-            {errorValidacion && <Alert severity="error" variant="filled" onClose={() => setErrorValidacion(false)} sx={{ mb: 2, borderRadius: 1 }}>Faltan algunos campos obligatorios</Alert>}
+                {/* 2. ALERTA */}
+                {errorValidacion && <Alert severity="error" variant="filled" onClose={() => setErrorValidacion(false)} sx={{ mb: 2, borderRadius: 1 }}>Faltan campos obligatorios</Alert>}
 
-            {/* 3. FORMULARIO PRINCIPAL */}
-            <Paper sx={{ p: 4, flexGrow: 1, borderRadius: 2 }}>
-                <form onSubmit={handleSubmit(handleSubmitGuardar, onError)}>
-                    <Grid container spacing={4}>
-
-                        {/* Título Gigante (Input transparente) */}
-                        <Grid size={12}>
-                            <TextField
-                                autoFocus // UX: Foco al abrir
-                                fullWidth
-                                placeholder="Por ejemplo, Encuesta de Evaluación de Docentes"
-                                variant="standard"
-                                error={!!errors.titulo}
-                                {...register("titulo", { required: true })}
-                                disabled={!esEditable}
-                                sx={{
-                                    '& .MuiInputBase-input': { fontSize: '2rem', fontWeight: 300 },
-                                    '& .MuiInput-underline:before': { borderBottom: '1px solid #e0e0e0' },
-                                    '& .MuiInput-underline:after': { borderBottom: '2px solid #023E8A' }
-                                }}
-                            />
-                        </Grid >
-
-                        {/* Campos de Cabecera (Responsable, Restricción) */}
-                        < Grid size={{ xs: 12, md: 6 }}>
-                            <Box display="flex" alignItems="center" gap={2} mb={2}>
-                                <Typography variant="body2" fontWeight="bold" width={100}>Responsable</Typography>
-                                <Controller
-                                    name="responsable"
-                                    control={control}
-                                    render={({ field }) => (
-                                        <TextField
-                                            {...field}
-                                            select
-                                            size="small"
-                                            variant="outlined"
-                                            sx={{ minWidth: 200 }}
-                                            disabled={!esEditable}
-                                            label={field.value ? "" : "Seleccionar usuario"}
-                                            InputLabelProps={{ shrink: false }} // Fix label overlapping if empty
-                                        >
-                                            {usuariosDisponibles.map((u) => (
-                                                <MenuItem key={u.id_admin || u.nombre_usuario} value={u.nombre_usuario}>
-                                                    <Box display="flex" alignItems="center" gap={1}>
-                                                        <Avatar sx={{ width: 24, height: 24, fontSize: 12 }}>
-                                                            {(u.nombre_usuario || '').charAt(0).toUpperCase()}
-                                                        </Avatar>
-                                                        {u.nombre_usuario}
-                                                    </Box>
-                                                </MenuItem>
-                                            ))}
-                                        </TextField>
-                                    )}
+                {/* 3. FORMULARIO */}
+                <Paper sx={{ p: 4, flexGrow: 1, borderRadius: 2 }}>
+                    <form onSubmit={handleSubmit((d) => guardarDatos(d, false), onError)}>
+                        <Grid container spacing={4}>
+                            {/* Título */}
+                            <Grid size={12}>
+                                <TextField
+                                    autoFocus fullWidth placeholder="Título de la Encuesta" variant="standard"
+                                    error={!!errors.titulo}
+                                    {...register("titulo", { required: true })}
+                                    disabled={!esEditable}
+                                    sx={{ '& .MuiInputBase-input': { fontSize: '2rem', fontWeight: 300 } }}
                                 />
-                            </Box>
-                            {/* Constructor de Reglas Avanzadas */}
-                            <Box mt={2}>
-                                <Typography variant="subtitle2" fontWeight="bold" mb={1}>Restringido a (Reglas Avanzadas)</Typography>
-                                {esEditable ? (
+                            </Grid>
+
+                            {/* Cabecera */}
+                            <Grid size={{ xs: 12, md: 6 }}>
+                                <Box display="flex" alignItems="center" gap={2} mb={2}>
+                                    <Typography variant="body2" fontWeight="bold" width={100}>Responsable</Typography>
                                     <Controller
-                                        name="filtros_json"
-                                        control={control}
+                                        name="responsable" control={control}
                                         render={({ field }) => (
-                                            <ConstructorReglas
-                                                reglas={field.value || []}
-                                                onChange={field.onChange}
-                                            />
+                                            <TextField {...field} select size="small" variant="outlined" sx={{ minWidth: 200 }} disabled={!esEditable} label={field.value ? "" : "Seleccionar"}>
+                                                {usuariosDisponibles.map((u) => (
+                                                    <MenuItem key={u.id_admin || u.nombre_usuario} value={u.nombre_usuario}>
+                                                        {u.nombre_usuario}
+                                                    </MenuItem>
+                                                ))}
+                                            </TextField>
                                         )}
                                     />
-                                ) : (
-                                    <Typography variant="body2" color="text.secondary">
-                                        {(watch('filtros_json') || []).length > 0
-                                            ? `${(watch('filtros_json') || []).length} reglas definidas`
-                                            : "Sin restricciones adicionales"}
-                                    </Typography>
-                                )}
-                            </Box>
+                                </Box>
+                                <Box mt={2}>
+                                    <Typography variant="subtitle2" fontWeight="bold" mb={1}>Reglas Avanzadas</Typography>
+                                    {esEditable ? (
+                                        <Controller name="filtros_json" control={control} render={({ field }) => (
+                                            <ConstructorReglas reglas={field.value || []} onChange={field.onChange} />
+                                        )} />
+                                    ) : (
+                                        <Typography variant="body2" color="text.secondary">{(watch('filtros_json') || []).length} reglas definidas</Typography>
+                                    )}
+                                </Box>
+                                <Box display="flex" gap={2} mt={2}>
+                                    <TextField label="Inicio" type="datetime-local" fullWidth InputLabelProps={{ shrink: true }} {...register("fecha_inicio", { required: true })} disabled={!esEditable} />
+                                    <TextField label="Fin" type="datetime-local" fullWidth InputLabelProps={{ shrink: true }} {...register("fecha_fin", { required: true })} disabled={!esEditable} />
+                                </Box>
+                            </Grid>
 
-                            {/* Fechas de Inicio y Fin */}
-                            <Box display="flex" gap={2} mt={2}>
-                                <TextField
-                                    label="Inicio"
-                                    type="datetime-local"
-                                    fullWidth
-                                    InputLabelProps={{ shrink: true }}
-                                    {...register("fecha_inicio", { required: true })}
-                                    disabled={!esEditable}
-                                />
-                                <TextField
-                                    label="Fin"
-                                    type="datetime-local"
-                                    fullWidth
-                                    InputLabelProps={{ shrink: true }}
-                                    {...register("fecha_fin", { required: true })}
-                                    disabled={!esEditable}
-                                />
-                            </Box>
-
-
-                        </Grid >
-
-                        {/* Radio Buttons (Público Objetivo) */}
-                        < Grid size={12} >
-                            <Controller
-                                name="publico_objetivo"
-                                control={control}
-                                render={({ field }) => (
+                            {/* Público */}
+                            <Grid size={12}>
+                                <Controller name="publico_objetivo" control={control} render={({ field }) => (
                                     <RadioGroup row {...field}>
                                         <FormControlLabel disabled={!esEditable} value="alumnos" control={<Radio />} label="Solo Alumnos" />
                                         <FormControlLabel disabled={!esEditable} value="docentes" control={<Radio />} label="Solo Docentes" />
                                         <FormControlLabel disabled={!esEditable} value="ambos" control={<Radio />} label="Todos (Campus)" />
                                     </RadioGroup>
-                                )}
-                            />
-                        </Grid >
+                                )} />
+                            </Grid>
 
-                        {/* 4. TABS DE DETALLE */}
-                        < Grid size={12} sx={{ mt: 2 }}>
-                            <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-                                <Tabs value={tabActual} onChange={handleTabChange} aria-label="tabs encuesta">
-                                    <Tab label="Preguntas" />
-                                    <Tab label="Opciones" />
-                                    <Tab label="Descripción" />
-                                    <Tab label="Mensaje final" />
-                                </Tabs>
-                            </Box>
+                            {/* TABS */}
+                            <Grid size={12} sx={{ mt: 2 }}>
+                                <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+                                    <Tabs value={tabActual} onChange={handleTabChange}>
+                                        <Tab label="Preguntas" />
+                                        <Tab label="Configuración" />
+                                        <Tab label="Descripción" />
+                                        <Tab label="Mensaje final" />
+                                    </Tabs>
+                                </Box>
 
-                            {/* Panel: Preguntas */}
-                            <Box role="tabpanel" hidden={tabActual !== 0} sx={{ p: 3 }}>
-                                {tabActual === 0 && (
-                                    <>
-                                        <DragDropContext onDragEnd={onDragEnd}>
-                                            <Droppable droppableId="lista-preguntas">
-                                                {(provided) => (
-                                                    <List {...provided.droppableProps} ref={provided.innerRef}>
-                                                        {preguntas.map((preg, idx) => (
-                                                            <Draggable
-                                                                key={preg.id_temporal}
-                                                                draggableId={String(preg.id_temporal)}
-                                                                index={idx}
-                                                                isDragDisabled={!esEditable}
-                                                            >
-                                                                {(provided) => (
-                                                                    <ListItem
-                                                                        ref={provided.innerRef}
-                                                                        {...provided.draggableProps}
-                                                                        sx={{
-                                                                            borderBottom: '1px solid #eee',
-                                                                            bgcolor: preg.tipo === 'seccion' ? '#e3f2fd' : 'white', // Color distinto para sección
-                                                                            '&:hover': { bgcolor: preg.tipo === 'seccion' ? '#bbdefb' : '#f5f5f5' }
-                                                                        }}
-                                                                        secondaryAction={
-                                                                            <Box>
-                                                                                {esEditable && (
-                                                                                    <>
-                                                                                        <IconButton onClick={() => abrirModalEdicion(preg)} title="Editar">
-                                                                                            <EditIcon fontSize="small" />
-                                                                                        </IconButton>
-                                                                                        <IconButton
-                                                                                            onClick={(e) => {
-                                                                                                e.stopPropagation();
-                                                                                                console.log("Borrando pregunta:", preg.id_temporal);
-                                                                                                borrarPregunta(preg.id_temporal);
-                                                                                            }}
-                                                                                            color="error"
-                                                                                            title="Borrar"
-                                                                                        >
-                                                                                            <DeleteIcon fontSize="small" />
-                                                                                        </IconButton>
-                                                                                    </>
-                                                                                )}
-                                                                            </Box>
-                                                                        }
-                                                                    >
-                                                                        <ListItemIcon {...provided.dragHandleProps} sx={{ cursor: esEditable ? 'grab' : 'default' }}>
-                                                                            <DragHandleIcon color="disabled" />
-                                                                        </ListItemIcon>
-
-                                                                        {/* Renderizado condicional según tipo */}
-                                                                        {preg.tipo === 'seccion' ? (
+                                {/* PANEL PREGUNTAS */}
+                                <Box role="tabpanel" hidden={tabActual !== 0} sx={{ p: 3 }}>
+                                    {tabActual === 0 && (
+                                        <>
+                                            <DragDropContext onDragEnd={accionesPregunta.reordenar}>
+                                                <Droppable droppableId="lista-preguntas">
+                                                    {(provided) => (
+                                                        <List {...provided.droppableProps} ref={provided.innerRef}>
+                                                            {preguntas.map((preg, idx) => (
+                                                                <Draggable key={preg.id_temporal} draggableId={String(preg.id_temporal)} index={idx} isDragDisabled={!esEditable}>
+                                                                    {(provided) => (
+                                                                        <ListItem
+                                                                            ref={provided.innerRef} {...provided.draggableProps}
+                                                                            sx={{ borderBottom: '1px solid #eee', bgcolor: preg.tipo === 'seccion' ? '#e3f2fd' : 'white' }}
+                                                                            secondaryAction={esEditable && (
+                                                                                <Box>
+                                                                                    <IconButton onClick={() => accionesPregunta.editar(preg)}><EditIcon fontSize="small" /></IconButton>
+                                                                                    <IconButton type="button" onClick={(e) => { e.stopPropagation(); accionesPregunta.borrar(Number(preg.id_temporal)); }} color="error"><DeleteIcon fontSize="small" /></IconButton>
+                                                                                </Box>
+                                                                            )}
+                                                                        >
+                                                                            <ListItemIcon {...provided.dragHandleProps} sx={{ cursor: esEditable ? 'grab' : 'default' }}><DragHandleIcon color="disabled" /></ListItemIcon>
                                                                             <ListItemText
-                                                                                primary={<Typography variant="subtitle1" fontWeight="bold" color="primary">{preg.texto_pregunta}</Typography>}
-                                                                                secondary="Sección"
-                                                                            />
-                                                                        ) : (
-                                                                            <ListItemText
-                                                                                primary={`${idx + 1}. ${preg.texto_pregunta}`}
+                                                                                primary={preg.tipo === 'seccion' ? <Typography variant="subtitle1" fontWeight="bold" color="primary">{preg.texto_pregunta}</Typography> : `${idx + 1}. ${preg.texto_pregunta}`}
                                                                                 secondary={preg.tipo.replace('_', ' ')}
                                                                             />
-                                                                        )}
-                                                                    </ListItem>
-                                                                )}
-                                                            </Draggable>
-                                                        ))}
-                                                        {provided.placeholder}
-                                                    </List>
-                                                )}
-                                            </Droppable>
-                                        </DragDropContext>
-
-                                        {/* Botones para agregar */}
-                                        {esEditable && (
-                                            <Box display="flex" gap={2} mt={2}>
-                                                <Button variant="text" startIcon={<AddIcon />} onClick={abrirModalNueva}>
-                                                    Agregar una pregunta
-                                                </Button>
-                                                <Button variant="text" color="secondary" startIcon={<ViewHeadlineIcon />} onClick={abrirModalNuevaSeccion}>
-                                                    Agregar una sección
-                                                </Button>
-                                            </Box>
-                                        )}
-
-                                        {preguntas.length === 0 && (
-                                            <Typography variant="body2" color="text.secondary" mt={2} fontStyle="italic">
-                                                No hay preguntas. Haz clic en "Agregar una pregunta" para comenzar.
-                                            </Typography>
-                                        )}
-                                    </>
-                                )}
-                            </Box>
-
-                            {/* TAB 2: OPCIONES */}
-                            <Box role="tabpanel" hidden={tabActual !== 1} sx={{ p: 3 }}>
-                                {tabActual === 1 && (
-                                    <Grid container spacing={3}>
-                                        <Grid size={{ xs: 12, md: 6 }}>
-                                            <Paper sx={{ p: 3 }}>
-                                                <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
-                                                    PREGUNTAS
-                                                </Typography>
-
-                                                <Box mb={4}>
-                                                    <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Paginación</Typography>
-                                                    <Controller
-                                                        name="configuracion.paginacion"
-                                                        control={control}
-                                                        render={({ field }) => (
-                                                            <RadioGroup {...field}>
-                                                                <FormControlLabel disabled={!esEditable} value="por_pregunta" control={<Radio size="small" />} label="Una página por pregunta" />
-                                                                <FormControlLabel disabled={!esEditable} value="por_seccion" control={<Radio size="small" />} label="Una página por sección" />
-                                                                <FormControlLabel disabled={!esEditable} value="todas" control={<Radio size="small" />} label="Una página con todas las preguntas" />
-                                                            </RadioGroup>
-                                                        )}
-                                                    />
+                                                                        </ListItem>
+                                                                    )}
+                                                                </Draggable>
+                                                            ))}
+                                                            {provided.placeholder}
+                                                        </List>
+                                                    )}
+                                                </Droppable>
+                                            </DragDropContext>
+                                            {esEditable && (
+                                                <Box display="flex" gap={2} mt={2}>
+                                                    <Button variant="text" startIcon={<AddIcon />} onClick={accionesPregunta.abrirNueva}>Agregar Pregunta</Button>
+                                                    <Button variant="text" color="secondary" startIcon={<ViewHeadlineIcon />} onClick={accionesPregunta.abrirNuevaSeccion}>Agregar Sección</Button>
                                                 </Box>
-                                                {/* ... Resto de Opciones ... */}
-                                                <Box mb={4}>
-                                                    <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Mostrar progreso como</Typography>
-                                                    <Controller
-                                                        name="configuracion.mostrar_progreso"
-                                                        control={control}
-                                                        render={({ field }) => (
-                                                            <RadioGroup {...field}>
-                                                                <FormControlLabel disabled={!esEditable} value="porcentaje" control={<Radio size="small" />} label="Porcentaje restante" />
-                                                                <FormControlLabel disabled={!esEditable} value="numero" control={<Radio size="small" />} label="Número (Ej: 6 / 10)" />
-                                                            </RadioGroup>
-                                                        )}
-                                                    />
-                                                </Box>
-                                                <Box>
-                                                    <Box display="flex" alignItems="center" gap={1} mb={1}>
-                                                        <Typography variant="subtitle2" fontWeight="bold">Permitir saltar entre preguntas</Typography>
-                                                    </Box>
-                                                    <Controller
-                                                        name="configuracion.permitir_saltar"
-                                                        control={control}
-                                                        render={({ field: { value, onChange } }) => (
-                                                            <FormControlLabel
-                                                                control={<CheckCircleIcon color={value ? "primary" : "disabled"} onClick={() => esEditable && onChange(!value)} />}
-                                                                label={value ? "Habilitado" : "Deshabilitado"}
-                                                                disabled={!esEditable}
-                                                            />
-                                                        )}
-                                                    />
-                                                </Box>
-                                            </Paper>
-                                        </Grid>
+                                            )}
+                                        </>
+                                    )}
+                                </Box>
 
-                                        <Grid size={{ xs: 12, md: 6 }}>
-                                            <Paper sx={{ p: 3 }}>
-                                                <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
-                                                    PARTICIPANTES
-                                                </Typography>
-
-                                                <Box mb={4}>
-                                                    <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Prioridad de la Encuesta</Typography>
-                                                    <Controller
-                                                        name="prioridad"
-                                                        control={control}
-                                                        render={({ field }) => (
-                                                            <RadioGroup {...field}>
-                                                                <FormControlLabel disabled={!esEditable} value="obligatoria" control={<Radio size="small" />} label="Obligatoria" />
-                                                                <FormControlLabel disabled={!esEditable} value="opcional" control={<Radio size="small" />} label="Opcional" />
-                                                                <FormControlLabel disabled={!esEditable} value="evaluacion_docente" control={<Radio size="small" />} label="Evaluación Docente" />
-                                                            </RadioGroup>
-                                                        )}
-                                                    />
-                                                </Box>
-
-                                                <Box>
-                                                    <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Acción disparadora</Typography>
-                                                    <Typography variant="caption" color="text.secondary" display="block" mb={2}>
-                                                        En qué condiciones se mostrará la encuesta.
+                                {/* PANEL CONFIGURACION */}
+                                <Box role="tabpanel" hidden={tabActual !== 1} sx={{ p: 3 }}>
+                                    {tabActual === 1 && (
+                                        <Grid container spacing={3}>
+                                            <Grid size={{ xs: 12, md: 6 }}>
+                                                <Typography variant="subtitle2" fontWeight="bold">Paginación</Typography>
+                                                <Controller name="configuracion.paginacion" control={control} render={({ field }) => (
+                                                    <RadioGroup {...field}>
+                                                        <FormControlLabel disabled={!esEditable} value="por_pregunta" control={<Radio size="small" />} label="Por Pregunta" />
+                                                        <FormControlLabel disabled={!esEditable} value="por_seccion" control={<Radio size="small" />} label="Por Sección" />
+                                                        <FormControlLabel disabled={!esEditable} value="todas" control={<Radio size="small" />} label="Una sola página" />
+                                                    </RadioGroup>
+                                                )} />
+                                            </Grid>
+                                            <Grid size={{ xs: 12, md: 6 }}>
+                                                <Typography variant="subtitle2" fontWeight="bold">Prioridad</Typography>
+                                                <Controller name="prioridad" control={control} render={({ field }) => (
+                                                    <RadioGroup {...field}>
+                                                        <FormControlLabel disabled={!esEditable} value="opcional" control={<Radio size="small" />} label="Opcional" />
+                                                        <FormControlLabel disabled={!esEditable} value="obligatoria" control={<Radio size="small" />} label="Obligatoria" />
+                                                        <FormControlLabel disabled={!esEditable} value="evaluacion_docente" control={<Radio size="small" />} label="Evaluación Docente" />
+                                                    </RadioGroup>
+                                                )} />
+                                            </Grid>
+                                            {/* Campo agregado: Acciones Disparadoras */}
+                                            <Grid size={{ xs: 12, md: 6 }}>
+                                                <Typography variant="subtitle2" fontWeight="bold">Acciones Disparadoras</Typography>
+                                                <Controller
+                                                    name="acciones_disparadoras"
+                                                    control={control}
+                                                    render={({ field }) => (
+                                                        <TextField
+                                                            {...field}
+                                                            select
+                                                            fullWidth
+                                                            size="small"
+                                                            SelectProps={{
+                                                                multiple: true,
+                                                                renderValue: (selected) => (selected as string[]).map(val => val.replace(/_/g, ' ')).join(', ')
+                                                            }}
+                                                            label="Seleccionar acciones"
+                                                            disabled={!esEditable || watch('prioridad') === 'evaluacion_docente'}
+                                                        >
+                                                            <MenuItem value="al_iniciar_sesion">Al Iniciar Sesión</MenuItem>
+                                                            <MenuItem value="al_ver_curso">Al Ver Curso</MenuItem>
+                                                            <MenuItem value="al_inscribir_examen">Al Inscribir Examen</MenuItem>
+                                                        </TextField>
+                                                    )}
+                                                />
+                                                {watch('prioridad') === 'evaluacion_docente' && (
+                                                    <Typography variant="caption" color="text.secondary">
+                                                        * Obligatorio para Evaluación Docente
                                                     </Typography>
-
-                                                    <Controller
-                                                        name="acciones_disparadoras"
-                                                        control={control}
-                                                        render={({ field: { value, onChange } }) => (
-                                                            <Box display="flex" flexDirection="column" gap={1}>
-                                                                {[
-                                                                    { val: 'al_iniciar_sesion', label: 'Al iniciar sesión' },
-                                                                    { val: 'al_ver_curso', label: 'Al ver curso' },
-                                                                    { val: 'al_inscribir_examen', label: 'Al inscribirse al examen' }
-                                                                ].map((opcion) => {
-                                                                    const isChecked = value.includes(opcion.val);
-                                                                    return (
-                                                                        <FormControlLabel
-                                                                            key={opcion.val}
-                                                                            control={
-                                                                                <CheckCircleIcon
-                                                                                    color={isChecked ? "primary" : "disabled"}
-                                                                                    onClick={() => {
-                                                                                        if (!esEditable) return;
-                                                                                        if (isChecked) {
-                                                                                            onChange(value.filter((v: string) => v !== opcion.val));
-                                                                                        } else {
-                                                                                            onChange([...value, opcion.val]);
-                                                                                        }
-                                                                                    }}
-                                                                                />
-                                                                            }
-                                                                            label={opcion.label}
-                                                                            disabled={!esEditable}
-                                                                        />
-                                                                    );
-                                                                })}
-                                                            </Box>
-                                                        )}
-                                                    />
-                                                </Box>
-                                            </Paper>
+                                                )}
+                                            </Grid>
                                         </Grid>
-                                    </Grid>
-                                )}
-                            </Box>
+                                    )}
+                                </Box>
 
-                            {/* TAB 2: DESCRIPCIÓN */}
-                            <Box role="tabpanel" hidden={tabActual !== 2} sx={{ p: 3 }}>
-                                {tabActual === 2 && (
-                                    <TextField
-                                        fullWidth multiline rows={4}
-                                        label="Descripción / Encabezado de la encuesta"
-                                        placeholder="Esta encuesta tiene como objetivo..."
-                                        {...register("descripcion")}
-                                    />
-                                )}
-                            </Box>
-                            {/* TAB 3: MENSAJE FINAL */}
-                            <Box role="tabpanel" hidden={tabActual !== 3} sx={{ p: 3 }}>
-                                {tabActual === 3 && (
-                                    <TextField
-                                        fullWidth multiline rows={4}
-                                        label="Mensaje de agradecimiento"
-                                        placeholder="¡Gracias por participar! Sus respuestas han sido guardadas."
-                                        {...register("mensaje_final")}
-                                    />
-                                )}
-                            </Box>
+                                {/* PANELES SIMPLES */}
+                                <Box role="tabpanel" hidden={tabActual !== 2} sx={{ p: 3 }}>
+                                    {tabActual === 2 && <TextField fullWidth multiline rows={4} label="Descripción pública" {...register("descripcion")} disabled={!esEditable} />}
+                                </Box>
+                                <Box role="tabpanel" hidden={tabActual !== 3} sx={{ p: 3 }}>
+                                    {tabActual === 3 && <TextField fullWidth multiline rows={4} label="Mensaje de Agradecimiento" {...register("mensaje_final")} disabled={!esEditable} />}
+                                </Box>
+                            </Grid>
+                        </Grid>
+                    </form>
+                </Paper>
+            </Box>
 
-                        </Grid >
-
-                    </Grid>
-                </form>
-            </Paper>
-
+            {/* MODAL PREGUNTA */}
             <ModalPregunta
                 open={modalAbierto}
                 onClose={() => setModalAbierto(false)}
-                onSave={guardarPreguntaLocal}
+                onSave={accionesPregunta.agregar}
                 preguntaEditar={preguntaEditando}
             />
-
-        </Box >
+        </FormProvider>
     );
 };
 

@@ -147,9 +147,10 @@ class ReglaAsignacionBase(EsquemaBase):
     id_carrera: Optional[int] = None
     id_asignatura: Optional[int] = None
     publico_objetivo: PublicoObjetivo
+    filtros_json: Optional[List[Dict[str, Any]]] = None
 
 class ReglaAsignacionCrear(ReglaAsignacionBase):
-    filtros_json: Optional[List[Dict[str, Any]]] = None
+    pass
 
 class ReglaAsignacionSalida(ReglaAsignacionBase):
     id: int
@@ -232,6 +233,16 @@ class EnvioRespuestasAlumno(BaseModel):
     id_referencia_contexto: str # Obligatorio para JIT
     metadatos_contexto: Dict[str, Any] # JSON para el OLAP (Facultad, Carrera, etc.)
     respuestas: List[RespuestaIndividual]
+
+# Schemas para guardar borrador (RF08)
+class GuardarBorradorRequest(BaseModel):
+    id_asignacion: int
+    respuestas: List[RespuestaIndividual]
+
+class BorradorResponse(BaseModel):
+    id_asignacion: int
+    respuestas: List[RespuestaIndividual]
+    fecha_actualizacion: Optional[datetime] = None
 
 # =============================================================================
 # REPORTES Y ANALÍTICA (OLAP) - ¡SECCIÓN FALTANTE AÑADIDA!

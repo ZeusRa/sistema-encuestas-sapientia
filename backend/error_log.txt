@@ -1,0 +1,10 @@
+!!!!!!!!!!!!!!!! ERROR CREANDO USUARIO !!!!!!!!!!!!!!!!
+Traceback (most recent call last):
+  File "C:\Users\Mathias\Desktop\Modulo Encuestas Sapientia\sistema-encuestas-sapientia\backend\app\routers\auth.py", line 159, in crear_usuario_admin
+    es_valida, mensaje_error = validar_fortaleza_password(clave_inicial)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Mathias\Desktop\Modulo Encuestas Sapientia\sistema-encuestas-sapientia\backend\app\routers\auth.py", line 38, in validar_fortaleza_password
+    if not re.search(r'[A-Z]', password):
+           ^^
+NameError: name 're' is not defined. Did you forget to import 're'
+name 're' is not defined

@@ -1,4 +1,5 @@
 from typing import List, Optional
+import enum
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
@@ -89,11 +90,18 @@ def trigger_etl(
 # --- SIMULACIÓN ---
 
 from pydantic import BaseModel
+import time
+
+class EscenarioSimulacion(str, enum.Enum):
+    alumno_1_borrador = "alumno_1_borrador"
+    alumno_2_completo = "alumno_2_completo"
+    alumno_3_flujo_completo = "alumno_3_flujo_completo"
 
 class SimulacionRequest(BaseModel):
     id_encuesta: int
-    id_usuario: int # ID del usuario a simular (debe tener asignación pendiente o creamos una al vuelo?)
+    id_usuario: int # ID del usuario a simular
     crear_asignacion: bool = False
+    escenario: EscenarioSimulacion = EscenarioSimulacion.alumno_2_completo
 
 @router.post("/simulacion")
 def simular_encuesta(
@@ -102,16 +110,13 @@ def simular_encuesta(
     admin: UsuarioAdmin = Depends(solo_admin)
 ):
     """
-    Simula el flujo completo:
-    1. Verifica/Crea asignación.
-    2. Obtiene preguntas.
-    3. Genera respuestas random.
-    4. Envía respuestas (usando lógica similar a sapientia.py).
+    Simula flujos complejos de encuesta.
     """
     logs = []
     
     try:
-        logs.append("Iniciando simulación...")
+        logs.append(f"Iniciando simulación para usuario {req.id_usuario} en encuesta {req.id_encuesta}...")
+        logs.append(f"Escenario seleccionado: {req.escenario}")
         
         # 1. Buscar o crear asignación
         asignacion = bd.query(AsignacionUsuario).filter(
@@ -125,7 +130,6 @@ def simular_encuesta(
                 asignacion = AsignacionUsuario(
                     id_usuario=req.id_usuario, 
                     id_encuesta=req.id_encuesta,
-
                     estado=EstadoAsignacion.pendiente
                 )
                 bd.add(asignacion)
@@ -134,82 +138,144 @@ def simular_encuesta(
             else:
                  raise HTTPException(status_code=404, detail="Asignación no encontrada y no se solicitó crearla.")
         
-        if asignacion.estado == EstadoAsignacion.realizada:
-             logs.append("ADVERTENCIA: La asignación ya estaba realizada. Se intentará procesar igual (posible error de duplicado).")
+        if asignacion.estado == EstadoAsignacion.realizada and req.escenario != EscenarioSimulacion.alumno_3_flujo_completo:
+             logs.append("ADVERTENCIA: La asignación ya estaba realizada.")
 
-        # 2. Obtener preguntas
+        # 2. Cargar Encuesta y Preguntas
         encuesta = bd.query(Encuesta).filter(Encuesta.id == req.id_encuesta).first()
         logs.append(f"Encuesta '{encuesta.nombre}' cargada. {len(encuesta.preguntas)} preguntas encontradas.")
 
-        # 3. Generar respuestas
-        respuestas_generadas = []
-        import app.routers.sapientia as sapientia_router # Reutilizamos schemas si es posible o definimos dicts
+        # Helper para generar respuestas
+        def generar_respuestas_random():
+            respuestas_gen = []
+            for preg in encuesta.preguntas:
+                val_resp = None
+                id_op = None
+                
+                if preg.tipo in ["opcion_unica", "opcion_multiple"]:
+                    if preg.opciones:
+                        op_elegida = random.choice(preg.opciones)
+                        id_op = op_elegida.id
+                        val_resp = op_elegida.texto_opcion
+                elif preg.tipo == "texto_libre":
+                    val_resp = f"Respuesta simulada {random.randint(1000,9999)}"
+                
+                if preg.tipo != "seccion":
+                    respuestas_gen.append({
+                        "id_pregunta": preg.id,
+                        "valor_respuesta": val_resp,
+                        "id_opcion": id_op
+                    })
+            return respuestas_gen
 
-        for preg in encuesta.preguntas:
-            val_resp = None
-            id_op = None
+        # Helper para guardar borrador
+        def guardar_borrador_simulado(resps):
+            from app.modelos import RespuestaBorrador
             
-            if preg.tipo in ["opcion_unica", "opcion_multiple"]:
-                if preg.opciones:
-                    op_elegida = random.choice(preg.opciones)
-                    id_op = op_elegida.id
-                    val_resp = op_elegida.texto_opcion
-            elif preg.tipo == "texto_libre":
-                val_resp = "Respuesta simulada automática " + str(random.randint(1000,9999))
+            borrador = bd.query(RespuestaBorrador).filter(
+                RespuestaBorrador.id_asignacion == asignacion.id
+            ).first()
             
-            # Solo agregamos si se generó algo (secciones no se responden)
-            if preg.tipo != "seccion":
-                respuestas_generadas.append(
-                    schemas.RespuestaIndividual(
-                        id_pregunta=preg.id,
-                        valor_respuesta=val_resp,
-                        id_opcion=id_op
-                    )
-                )
-        
-        logs.append(f"Generadas {len(respuestas_generadas)} respuestas aleatorias.")
+            if not borrador:
+                borrador = RespuestaBorrador(id_asignacion=asignacion.id, respuestas_json=resps)
+                bd.add(borrador)
+                logs.append("Nuevo borrador creado.")
+            else:
+                borrador.respuestas_json = resps
+                logs.append("Borrador existente actualizado.")
+            
+            bd.commit()
 
-        # 4. Enviar (Llamamos a la lógica interna de sapientia.py o la reimplementamos aqui para tener control)
-        # Reimplementamos para no depender del endpoint HTTP y poder loguear mejor
-        
-        # TRANSACCION
-        logs.append("Iniciando transacción de base de datos...")
-        asignacion.estado = EstadoAsignacion.realizada
-        asignacion.fecha_realizacion = func.now()
-        
-        nueva_transaccion = TransaccionEncuesta(
-            id_encuesta=req.id_encuesta,
-            metadatos_contexto={"origen": "simulacion_tecnica", "admin_user": admin.nombre_usuario},
-            procesado_etl=False
-        )
-        bd.add(nueva_transaccion)
-        bd.flush()
-        
-        for r in respuestas_generadas:
-             nueva_respuesta = modelos.Respuesta(
-                id_transaccion=nueva_transaccion.id_transaccion,
-                id_pregunta=r.id_pregunta,
-                valor_respuesta=r.valor_respuesta,
-                id_opcion=r.id_opcion
+        # Helper para finalizar (Transacción)
+        def finalizar_simulado(resps):
+            asignacion.estado = EstadoAsignacion.realizada
+            asignacion.fecha_realizacion = func.now()
+            
+            import hashlib
+            hash_user = hashlib.sha256(f"{req.id_usuario}SIM".encode()).hexdigest()
+
+            nueva_transaccion = TransaccionEncuesta(
+                id_encuesta=req.id_encuesta,
+                metadatos_contexto={"origen": "simulacion", "hash": hash_user},
+                procesado_etl=False
             )
-             bd.add(nueva_respuesta)
-        
-        if asignacion.borrador:
-            bd.delete(asignacion.borrador)
+            bd.add(nueva_transaccion)
+            bd.flush()
             
-        bd.commit()
-        logs.append("Transacción completada exitosamente. Encuesta guardada.")
+            for r in resps:
+                 bd.add(modelos.Respuesta(
+                    id_transaccion=nueva_transaccion.id_transaccion,
+                    id_pregunta=r["id_pregunta"],
+                    valor_respuesta=r["valor_respuesta"],
+                    id_opcion=r["id_opcion"]
+                ))
+            
+            # Borrar borrador al finalizar
+            if asignacion.borrador:
+                bd.delete(asignacion.borrador)
+                logs.append("Borrador eliminado tras finalizar.")
+
+            bd.commit()
+            logs.append("Encuesta FINALIZADA y guardada en OLTP.")
+
+        # --- LÓGICA POR ESCENARIO ---
+
+        respuestas = generar_respuestas_random()
+
+        if req.escenario == EscenarioSimulacion.alumno_1_borrador:
+            logs.append("EJECUTANDO: Alumno 1 (Solo Borrador)")
+            guardar_borrador_simulado(respuestas)
+            logs.append("Simulación detenida. El alumno NO finalizó.")
+
+        elif req.escenario == EscenarioSimulacion.alumno_2_completo:
+            logs.append("EJECUTANDO: Alumno 2 (Completar directo)")
+            finalizar_simulado(respuestas)
+
+        elif req.escenario == EscenarioSimulacion.alumno_3_flujo_completo:
+            logs.append("EJECUTANDO: Alumno 3 (Flujo Completo)")
+            
+            # Paso 1: Guardar Borrador
+            logs.append("Paso 1: Guardando borrador inicial...")
+            guardar_borrador_simulado(respuestas)
+            
+            # Paso 2: Simular espera/abandono
+            logs.append("Paso 2: Simulando espera (alumno sale del sistema)...")
+            
+            # Paso 3: Recuperar
+            logs.append("Paso 3: Alumno regresa. Recuperando borrador...")
+            bd.refresh(asignacion)
+            if asignacion.borrador:
+                logs.append(f"Borrador recuperado con {len(asignacion.borrador.respuestas_json)} respuestas.")
+            else:
+                logs.append("ERROR: No se encontró el borrador para recuperar.")
+            
+            # Paso 4: Completar
+            logs.append("Paso 4: Alumno completa y envía.")
+            finalizar_simulado(respuestas)
 
         return {
             "exito": True,
-            "logs": logs,
-            "transaccion_id": nueva_transaccion.id_transaccion
+            "logs": logs
         }
 
     except Exception as e:
         bd.rollback()
         logs.append(f"ERROR CRITICO: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return {
             "exito": False,
             "logs": logs
         }
+
+@router.get("/chequeo-sapientia/{id_alumno}")
+def consultar_pendientes_sapientia(
+    id_alumno: int,
+    bd: Session = Depends(obtener_bd),
+    admin: UsuarioAdmin = Depends(solo_admin)
+):
+    """
+    Simula la consulta que hace el portal Sapientia para ver si hay bloqueos.
+    """
+    from app.routers.sapientia import verificar_estado_alumno
+    return verificar_estado_alumno(id_alumno, bd)

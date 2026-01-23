@@ -1,5 +1,5 @@
-from typing import List, Optional, Any
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func, cast, Float
@@ -52,11 +52,14 @@ def obtener_kpis_dashboard(
     if total_asignaciones > 0:
         avance_pct = round((realizadas / total_asignaciones) * 100, 2)
         
+    encuestas_activas = bd.query(modelos.Encuesta).filter(modelos.Encuesta.estado == modelos.EstadoEncuesta.en_curso).count()
+
     return {
         "avance_global_pct": avance_pct,
         "total_asignaciones": total_asignaciones,
         "asignaciones_realizadas": realizadas,
-        "asignaciones_pendientes": pendientes
+        "asignaciones_pendientes": pendientes,
+        "encuestas_activas": encuestas_activas
     }
 
 @router.get("/dashboard/participacion")
@@ -74,7 +77,7 @@ def get_idd_metrics(
     encuesta_id: int,
     campus: Optional[str] = Query(None),
     facultad: Optional[str] = Query(None),
-    carrera: Optional[str] = Query(None),
+    departamento: Optional[str] = Query(None),
     docente: Optional[str] = Query(None),
     asignatura: Optional[str] = Query(None),
     anho: Optional[int] = Query(None),
@@ -88,8 +91,8 @@ def get_idd_metrics(
             query = query.filter(model_class.metadatos_contexto['campus'].astext == campus)
         if facultad and facultad != "Todos":
             query = query.filter(model_class.metadatos_contexto['facultad'].astext == facultad)
-        if carrera and carrera != "Todos":
-            query = query.filter(model_class.metadatos_contexto['carrera'].astext == carrera)
+        if departamento and departamento != "Todos":
+            query = query.filter(model_class.metadatos_contexto['departamento'].astext == departamento)
         if docente and docente != "Todos":
             query = query.filter(model_class.metadatos_contexto['docente'].astext == docente)
         if asignatura and asignatura != "Todos":
@@ -138,7 +141,7 @@ def get_radar_data(
     encuesta_id: int,
     campus: Optional[str] = Query(None),
     facultad: Optional[str] = Query(None),
-    carrera: Optional[str] = Query(None),
+    departamento: Optional[str] = Query(None),
     docente: Optional[str] = Query(None),
     asignatura: Optional[str] = Query(None),
     anho: Optional[int] = Query(None),
@@ -166,7 +169,7 @@ def get_diverging_data(
     encuesta_id: int,
     campus: Optional[str] = Query(None),
     facultad: Optional[str] = Query(None),
-    carrera: Optional[str] = Query(None),
+    departamento: Optional[str] = Query(None),
     docente: Optional[str] = Query(None),
     asignatura: Optional[str] = Query(None),
     anho: Optional[int] = Query(None),
@@ -200,7 +203,7 @@ def get_limitations_data(
     encuesta_id: int,
     campus: Optional[str] = Query(None),
     facultad: Optional[str] = Query(None),
-    carrera: Optional[str] = Query(None),
+    departamento: Optional[str] = Query(None),
     docente: Optional[str] = Query(None),
     asignatura: Optional[str] = Query(None),
     anho: Optional[int] = Query(None),

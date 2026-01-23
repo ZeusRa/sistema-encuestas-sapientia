@@ -1,10 +1,15 @@
 from typing import List, Dict, Any
+import logging
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func
 from app.database import obtener_bd
 from app import modelos, schemas
-from app.routers.admin import obtener_usuario_actual 
+from app.routers.admin import obtener_usuario_actual
+
+# Configurar logger
+logger = logging.getLogger(__name__)
+
 router = APIRouter(
     prefix="/reportes",
     tags=["Reportes y Analítica (OLAP)"]
@@ -114,6 +119,7 @@ def reporte_tabla_respuestas(
     """
     Retorna una tabla plana de hechos_respuestas con JOIN a dimensiones.
     Soporta filtros y paginación.
+    En caso de error (e.g., tablas OLAP no listas), retorna lista vacía y loguea el error.
     """
     offset = (page - 1) * limit
     
@@ -162,7 +168,7 @@ def reporte_tabla_respuestas(
         resultados = bd.execute(query).fetchall()
     except Exception as e:
         # En caso de error (e.g., tabla no existe aun por ETL pendiente), devolvemos lista vacía
-        print(f"Error consulta OLAP: {e}")
+        logger.error(f"Error consulta OLAP (reporte_tabla_respuestas): {e}")
         return []
     
     return [
@@ -178,6 +184,96 @@ def reporte_tabla_respuestas(
         }
         for row in resultados
     ]
+
+@router.get("/catalogos", response_model=Dict[str, List[str]])
+def obtener_catalogos_reportes(
+    bd: Session = Depends(obtener_bd),
+    usuario: dict = Depends(obtener_usuario_actual)
+):
+    """
+    Retorna listas únicas de facultades, departamentos y DOCENTES para filtros.
+    Consulta las tablas de dimensión OLAP.
+    """
+    try:
+        facultades = bd.execute(text("SELECT DISTINCT nombre_facultad FROM encuestas_olap.dim_ubicacion ORDER BY 1")).fetchall()
+        departamentos = bd.execute(text("SELECT DISTINCT nombre_carrera FROM encuestas_olap.dim_ubicacion ORDER BY 1")).fetchall()
+        docentes = bd.execute(text("SELECT DISTINCT nombre_profesor FROM encuestas_olap.dim_contexto_academico WHERE nombre_profesor != 'Desconocido' ORDER BY 1")).fetchall()
+        sedes = bd.execute(text("SELECT DISTINCT nombre_campus FROM encuestas_olap.dim_ubicacion ORDER BY 1")).fetchall()
+        
+        return {
+            "facultades": [r[0] for r in facultades if r[0]],
+            "departamentos": [r[0] for r in departamentos if r[0]],
+            "docentes": [r[0] for r in docentes if r[0]],
+            "sedes": [r[0] for r in sedes if r[0]]
+        }
+    except Exception as e:
+        logger.error(f"Error cargando catalogos OLAP: {e}")
+        return {"facultades": [], "departamentos": [], "docentes": [], "sedes": []}
+
+from fastapi.responses import StreamingResponse
+import io
+import pandas as pd
+
+@router.get("/exportar/excel")
+def exportar_reporte_excel(
+    encuesta_id: int,
+    bd: Session = Depends(obtener_bd),
+    usuario: dict = Depends(obtener_usuario_actual)
+):
+    """
+    Exporta un Excel con dos hojas: 'Resumen' (KPIs) y 'Detalle' (Respuestas).
+    """
+    try:
+        # 1. Obtener Datos
+        q_detalle = text(f"""
+            SELECT 
+                h.id_transaccion_origen,
+                t.fecha,
+                u.nombre_campus,
+                u.nombre_facultad,
+                u.nombre_carrera,
+                c.nombre_profesor,
+                c.nombre_asignatura,
+                p.texto_pregunta,
+                h.respuesta_texto
+            FROM encuestas_olap.hechos_respuestas h
+            JOIN encuestas_olap.dim_tiempo t ON h.id_dim_tiempo = t.id_dim_tiempo
+            JOIN encuestas_olap.dim_ubicacion u ON h.id_dim_ubicacion = u.id_dim_ubicacion
+            JOIN encuestas_olap.dim_pregunta p ON h.id_dim_pregunta = p.id_dim_pregunta
+            LEFT JOIN encuestas_olap.dim_contexto_academico c ON h.id_dim_contexto = c.id_dim_contexto
+            WHERE p.id_encuesta = {encuesta_id}
+            ORDER BY h.id_hecho DESC
+        """)
+        
+        df_detalle = pd.read_sql(q_detalle, bd.bind)
+        
+        # 2. Generar Excel en memoria
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            # Hoja Resumen (Simple pivot)
+            if not df_detalle.empty:
+                resumen = df_detalle.pivot_table(
+                    index='texto_pregunta', 
+                    values='id_transaccion_origen', 
+                    aggfunc='count'
+                ).rename(columns={'id_transaccion_origen': 'cantidad_respuestas'})
+                resumen.to_excel(writer, sheet_name='Resumen')
+            else:
+                pd.DataFrame({'Info': ['No hay datos']}).to_excel(writer, sheet_name='Resumen')
+            
+            # Hoja Detalle
+            df_detalle.to_excel(writer, sheet_name='Detalle_Respuestas', index=False)
+            
+        output.seek(0)
+        
+        headers = {
+            'Content-Disposition': f'attachment; filename="reporte_encuesta_{encuesta_id}.xlsx"'
+        }
+        return StreamingResponse(output, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', headers=headers)
+
+    except Exception as e:
+        logger.error(f"Error exportando Excel: {e}")
+        raise HTTPException(status_code=500, detail="Error generando reporte excel")
 
 @router.get("/analisis-texto", response_model=List[schemas.ReporteNubePalabras])
 def reporte_nube_palabras(
@@ -213,7 +309,8 @@ def reporte_nube_palabras(
     
     try:
         filas = bd.execute(query).fetchall()
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error en reporte_nube_palabras: {e}")
         return []
     
     # Análisis simple de frecuencia en Python
@@ -276,7 +373,8 @@ def reporte_distribucion(
     
     try:
         filas = bd.execute(query).fetchall()
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error en reporte_distribucion: {e}")
         return []
     
     # Procesar en Python para estructura {"pregunta": X, opciones: {A: 10, B: 20}}

@@ -5,17 +5,31 @@ import FiltrosReportes from '../components/analitica/FiltrosReportes';
 import GraficoDistribucion from '../components/analitica/GraficoDistribucion';
 import NubeDePalabras from '../components/analitica/NubeDePalabras';
 import TablaRespuestas from '../components/analitica/TablaRespuestas';
+import { Button } from '@mui/material';
+import { useReportesStore } from '../context/useReportesStore';
 
 const ReportesAvanzados: React.FC = () => {
     return (
         <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-            <Box sx={{ mb: 4 }}>
-                <Typography variant="h4" component="h1" gutterBottom fontWeight="bold" color="primary">
-                    Reportes Avanzados
-                </Typography>
-                <Typography variant="subtitle1" color="text.secondary">
-                    Análisis detallado de encuestas, tendencias y distribución de respuestas.
-                </Typography>
+            <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Box>
+                    <Typography variant="h4" component="h1" gutterBottom fontWeight="bold" color="primary">
+                        Reportes Avanzados
+                    </Typography>
+                    <Typography variant="subtitle1" color="text.secondary">
+                        Análisis detallado de encuestas, tendencias y distribución de respuestas.
+                    </Typography>
+                </Box>
+                <Box>
+                    <Button
+                        variant="contained"
+                        color="success"
+                        onClick={() => useReportesStore.getState().exportarExcel()}
+                        sx={{ ml: 2 }}
+                    >
+                        Exportar Excel
+                    </Button>
+                </Box>
             </Box>
 
             <Grid container spacing={3}>

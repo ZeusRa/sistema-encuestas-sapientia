@@ -1,4 +1,5 @@
 from datetime import timedelta, datetime
+import re
 from typing import Annotated, List
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -17,6 +18,37 @@ router = APIRouter(tags=["Autenticación"])
 
 # Dependencia para extraer el token del header Authorization
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+def validar_fortaleza_password(password: str) -> tuple[bool, str]:
+    """
+    Valida que la contraseña cumpla con políticas de seguridad.
+    
+    Requisitos:
+    - Mínimo 12 caracteres
+    - Al menos una mayúscula
+    - Al menos una minúscula
+    - Al menos un número
+    - Al menos un símbolo especial
+    
+    Returns:
+        tuple: (es_valida: bool, mensaje_error: str)
+    """
+    if len(password) < 12:
+        return False, "La contraseña debe tener al menos 12 caracteres"
+    
+    if not re.search(r'[A-Z]', password):
+        return False, "La contraseña debe contener al menos una letra mayúscula"
+    
+    if not re.search(r'[a-z]', password):
+        return False, "La contraseña debe contener al menos una letra minúscula"
+    
+    if not re.search(r'[0-9]', password):
+        return False, "La contraseña debe contener al menos un número"
+    
+    if not re.search(r'[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\;\'/~`]', password):
+        return False, "La contraseña debe contener al menos un símbolo especial (!@#$%^&*...)"
+    
+    return True, ""
 
 def obtener_usuario_actual(token: str = Depends(oauth2_scheme), bd: Session = Depends(obtener_bd)):
     """
@@ -114,8 +146,13 @@ def crear_usuario_admin(
     debe_cambiar = False
 
     if not clave_inicial:
-        clave_inicial = "temporal123" # Clave Genérica
+        clave_inicial = "Temporal123!@#"  # Clave Genérica que cumple requisitos
         debe_cambiar = True
+    else:
+        # Validar fortaleza de la contraseña proporcionada
+        es_valida, mensaje_error = validar_fortaleza_password(clave_inicial)
+        if not es_valida:
+            raise HTTPException(status_code=400, detail=mensaje_error)
 
     clave_hash = obtener_hash_clave(clave_inicial)
     
@@ -125,7 +162,8 @@ def crear_usuario_admin(
         clave_encriptada=clave_hash,
         rol=usuario.rol,
         debe_cambiar_clave=debe_cambiar,
-        activo=True
+        activo=True,
+        fecha_creacion=datetime.now()
     )
     
     bd.add(nuevo_usuario)
@@ -179,7 +217,7 @@ def regenerar_clave_usuario(
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-    nueva_clave = "temporal123"
+    nueva_clave = "Temporal123!@#"  # Clave que cumple requisitos de seguridad
     usuario.clave_encriptada = obtener_hash_clave(nueva_clave)
     usuario.debe_cambiar_clave = True
 
@@ -222,6 +260,11 @@ def cambiar_clave(
     # 2. Verificar que las nuevas claves coincidan
     if not datos.claves_coinciden:
         raise HTTPException(status_code=400, detail="Las nuevas contraseñas no coinciden")
+
+    # 2.5. Validar fortaleza de la nueva contraseña
+    es_valida, mensaje_error = validar_fortaleza_password(datos.clave_nueva)
+    if not es_valida:
+        raise HTTPException(status_code=400, detail=mensaje_error)
 
     # 3. Actualizar la clave
     nueva_clave_hash = obtener_hash_clave(datos.clave_nueva)

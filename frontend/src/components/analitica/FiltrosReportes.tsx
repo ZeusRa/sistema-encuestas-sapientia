@@ -83,19 +83,17 @@ const FiltrosReportes: React.FC = () => {
                 />
 
                 <Autocomplete
-                    options={['Todos', ...catalogs.carreras]}
-                    value={filtros.carrera}
-                    onChange={(_, newValue) => setFiltro('carrera', newValue || 'Todos')}
-                    renderInput={(params) => <TextField {...params} label="Carrera" size="small" />}
+                    options={['Todos', ...catalogs.departamentos]}
+                    value={filtros.departamento}
+                    onChange={(_, newValue) => setFiltro('departamento', newValue || 'Todos')}
+                    renderInput={(params) => <TextField {...params} label="Departamento" size="small" />}
                 />
 
-                <TextField
-                    name="docente"
-                    label="Docente"
+                <Autocomplete
+                    options={['Todos', ...catalogs.docentes]}
                     value={filtros.docente}
-                    onChange={handleChange}
-                    size="small"
-                    placeholder="Nombre del docente"
+                    onChange={(_, newValue) => setFiltro('docente', newValue || 'Todos')}
+                    renderInput={(params) => <TextField {...params} label="Docente" size="small" placeholder="Buscar docente..." />}
                 />
 
                 <TextField
@@ -108,10 +106,21 @@ const FiltrosReportes: React.FC = () => {
                 />
 
                 <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={() => useReportesStore.getState().fetchReportes()}
+                    disabled={loading}
+                    fullWidth
+                >
+                    Aplicar Filtros
+                </Button>
+
+                <Button
                     variant="outlined"
                     color="secondary"
                     onClick={limpiarFiltros}
                     disabled={loading}
+                    fullWidth
                 >
                     Limpiar Filtros
                 </Button>

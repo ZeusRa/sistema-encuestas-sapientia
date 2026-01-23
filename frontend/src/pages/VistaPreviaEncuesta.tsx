@@ -182,7 +182,78 @@ const VistaPreviaEncuesta = () => {
         return esValido;
     };
 
-    // --- NAVEGACIÓN ---
+    // --- NAVEGACIÓN Y ENVÍO ---
+    const [enviando, setEnviando] = useState(false);
+
+    // Función de envío real (QA Fix ID 06)
+    const enviarRespuestas = async () => {
+        setEnviando(true);
+        try {
+            // Transformar respuestas al formato del backend
+            const listaRespuestas: any[] = [];
+
+            // Aplanamos todas las preguntas de todas las páginas para buscar tipos
+            const todalLasPreguntas = paginas.flatMap(s => s.preguntas);
+
+            Object.entries(respuestas).forEach(([key, valor]) => {
+                const idPregunta = Number(key);
+                const pregunta = todalLasPreguntas.find(p => p.id === idPregunta);
+
+                if (!pregunta) return;
+
+                if (pregunta.tipo === 'texto_libre') {
+                    listaRespuestas.push({ id_pregunta: idPregunta, valor_respuesta: String(valor) });
+                } else if (pregunta.tipo === 'opcion_multiple') {
+                    // Array de IDs
+                    if (Array.isArray(valor)) {
+                        valor.forEach(v => listaRespuestas.push({ id_pregunta: idPregunta, id_opcion: Number(v) }));
+                    }
+                } else if (pregunta.tipo === 'matriz') {
+                    // Objeto { fila: col }
+                    if (typeof valor === 'object' && valor) {
+                        Object.entries(valor).forEach(([fila, col]) => {
+                            // Simplificación para visualización: Guardamos como texto "Fila X: Col Y"
+                            // Idealmente backend soportaría matriz nativa.
+                            if (Array.isArray(col)) {
+                                col.forEach(c => listaRespuestas.push({
+                                    id_pregunta: idPregunta,
+                                    valor_respuesta: `Fila ${fila} - Columna ${c}`
+                                }));
+                            } else {
+                                listaRespuestas.push({
+                                    id_pregunta: idPregunta,
+                                    valor_respuesta: `Fila ${fila} - Columna ${col}`
+                                });
+                            }
+                        });
+                    }
+                } else {
+                    // Opcion unica / Radio (valor es ID)
+                    listaRespuestas.push({ id_pregunta: idPregunta, id_opcion: Number(valor) });
+                }
+            });
+
+            // Payload
+            const payload = {
+                id_usuario: 9999, // Simulación o Usuario Real si existe context
+                id_encuesta: Number(id),
+                id_referencia_contexto: `SIMULACION-PREVIEW-${Date.now()}`,
+                metadatos_contexto: { mod: 'vista_previa' },
+                respuestas: listaRespuestas
+            };
+
+            await api.post('/sapientia/recepcionar-respuestas', payload);
+            setCompletado(true);
+
+        } catch (error) {
+            console.error("Error enviando encuesta:", error);
+            // Si hay error de validación (Fix ID 07), se mostrará
+            alert("Error al enviar respuestas. Revise que la encuesta esté activa y validada.");
+        } finally {
+            setEnviando(false);
+        }
+    };
+
     const handleSiguiente = () => {
         // Validar si no se permite saltar
         if (!config?.permitir_saltar) {
@@ -195,7 +266,7 @@ const VistaPreviaEncuesta = () => {
         } else {
             // Intento de envío final (siempre valida al final)
             if (validarPaginaActual()) {
-                setCompletado(true);
+                enviarRespuestas();
             }
         }
     };
@@ -424,7 +495,7 @@ const VistaPreviaEncuesta = () => {
                     <Button
                         variant="outlined"
                         onClick={handleAnterior}
-                        disabled={paginaActual === 0}
+                        disabled={paginaActual === 0 || enviando}
                         startIcon={<KeyboardArrowLeft />}
                     >
                         Anterior
@@ -433,10 +504,11 @@ const VistaPreviaEncuesta = () => {
                     <Button
                         variant="contained"
                         onClick={handleSiguiente}
-                        endIcon={paginaActual === paginas.length - 1 ? <CheckCircleIcon /> : <KeyboardArrowRight />}
+                        disabled={enviando}
+                        endIcon={enviando ? <CircularProgress size={20} color="inherit" /> : (paginaActual === paginas.length - 1 ? <CheckCircleIcon /> : <KeyboardArrowRight />)}
                         color={paginaActual === paginas.length - 1 ? 'success' : 'primary'}
                     >
-                        {paginaActual === paginas.length - 1 ? 'Enviar Formulario' : 'Siguiente'}
+                        {paginaActual === paginas.length - 1 ? (enviando ? 'Enviando...' : 'Enviar Formulario') : 'Siguiente'}
                     </Button>
                 </Box>
             </Container>

@@ -278,22 +278,37 @@ const PanelETL = () => {
 
 const PlaygroundSimulacion = () => {
     const [idEncuesta, setIdEncuesta] = useState("");
+    const [activeSurveys, setActiveSurveys] = useState<any[]>([]); // New state for surveys
     const [idUsuario, setIdUsuario] = useState("");
     const [crearSiNoExiste, setCrearSiNoExiste] = useState(true);
-    const [logs, setLogs] = useState<string[]>([]);
+    const [escenario, setEscenario] = useState("alumno_2_completo");
+    const [logs, setLogs] = useState<{ id: number, text: string }[]>([]);
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        // Fetch active surveys for the dropdown
+        api.get('/admin/tecnico/encuestas').then(res => {
+            const activos = res.data.filter((e: any) => e.estado === 'en_curso');
+            setActiveSurveys(activos);
+        }).catch(err => toast.error("Error cargando encuestas activas"));
+    }, []);
+
+    // Estado para chequeo sapientia
+    const [chkAlumno, setChkAlumno] = useState("");
+    const [chkResultado, setChkResultado] = useState<any>(null);
 
     const simular = async () => {
         if (!idEncuesta || !idUsuario) return toast.warning("Complete todos los campos");
 
         setLoading(true);
-        setLogs(["Iniciando solicitud..."]);
+        setLogs([{ id: Date.now(), text: "Iniciando solicitud..." }]);
 
         try {
             const res = await api.post('/admin/tecnico/simulacion', {
                 id_encuesta: parseInt(idEncuesta),
                 id_usuario: parseInt(idUsuario),
-                crear_asignacion: crearSiNoExiste
+                crear_asignacion: crearSiNoExiste,
+                escenario: escenario
             });
 
             if (res.data.exito) {
@@ -301,29 +316,54 @@ const PlaygroundSimulacion = () => {
             } else {
                 toast.error("Simulación con errores");
             }
-            setLogs(prev => [...prev, ...res.data.logs]);
+            setLogs(prev => [
+                ...prev,
+                ...res.data.logs.map((l: string, idx: number) => ({ id: Date.now() + idx, text: l }))
+            ]);
         } catch (error: any) {
             toast.error("Error en la simulación");
-            setLogs(prev => [...prev, "ERROR HTTP: " + (error.response?.data?.detail || error.message)]);
+            setLogs(prev => [
+                ...prev,
+                { id: Date.now(), text: "ERROR HTTP: " + (error.response?.data?.detail || error.message) }
+            ]);
         } finally {
             setLoading(false);
         }
     };
 
+    const verificarPendientes = async () => {
+        if (!chkAlumno) return;
+        try {
+            const res = await api.get(`/admin/tecnico/chequeo-sapientia/${chkAlumno}`);
+            setChkResultado(res.data);
+            toast.info("Consulta realizada");
+        } catch (error) {
+            toast.error("Error consultando sapientia");
+        }
+    }
+
     return (
         <Grid container spacing={3}>
-            <Grid xs={12} md={5}>
+            <Grid size={{ xs: 12, md: 5 }}>
                 <Paper sx={{ p: 3 }}>
                     <Typography variant="h6" gutterBottom>Configuración de Simulacro</Typography>
                     <TextField
-                        label="ID Encuesta"
+                        select
+                        label="Encuesta (En Curso)"
                         fullWidth
-                        type="number"
                         margin="normal"
                         value={idEncuesta}
                         onChange={(e) => setIdEncuesta(e.target.value)}
-                        helperText="ID de la encuesta a responder"
-                    />
+                        SelectProps={{ native: true }}
+                        helperText="Seleccione una encuesta activa"
+                    >
+                        <option value="">-- Seleccione --</option>
+                        {activeSurveys.map((s) => (
+                            <option key={s.id} value={s.id}>
+                                #{s.id} - {s.nombre}
+                            </option>
+                        ))}
+                    </TextField>
                     <TextField
                         label="ID Usuario (Alumno)"
                         fullWidth
@@ -345,6 +385,22 @@ const PlaygroundSimulacion = () => {
                     />
 
                     <Box mt={2}>
+                        <TextField
+                            select
+                            label="Escenario de Simulación"
+                            fullWidth
+                            SelectProps={{ native: true }}
+                            value={escenario}
+                            onChange={(e) => setEscenario(e.target.value)}
+                            helperText="Define el comportamiento del alumno simulado"
+                        >
+                            <option value="alumno_1_borrador">Alumno 1: Inicia, guarda borrador y sale</option>
+                            <option value="alumno_2_completo">Alumno 2: Inicia y completa (Happy Path)</option>
+                            <option value="alumno_3_flujo_completo">Alumno 3: Borrador -&gt; Abandona -&gt; Retoma -&gt; Completa</option>
+                        </TextField>
+                    </Box>
+
+                    <Box mt={3}>
                         <Button
                             variant="contained"
                             fullWidth
@@ -355,13 +411,32 @@ const PlaygroundSimulacion = () => {
                             {loading ? "Simulando..." : "Iniciar Simulación"}
                         </Button>
                     </Box>
+
+                    <Box mt={4} pt={2} borderTop={1} borderColor="divider">
+                        <Typography variant="h6" gutterBottom>Chequeo API Sapientia</Typography>
+                        <Box display="flex" gap={2}>
+                            <TextField
+                                label="ID Alumno"
+                                size="small"
+                                value={chkAlumno}
+                                onChange={(e) => setChkAlumno(e.target.value)}
+                            />
+                            <Button variant="outlined" onClick={verificarPendientes}>Consultar</Button>
+                        </Box>
+                        {chkResultado && (
+                            <Paper variant="outlined" sx={{ p: 1, mt: 1, bgcolor: '#e0f7fa' }}>
+                                <Typography variant="body2" fontWeight="bold">Bloqueo: {chkResultado.estado_bloqueo ? "SÍ" : "NO"}</Typography>
+                                <Typography variant="caption">{chkResultado.mensaje}</Typography>
+                            </Paper>
+                        )}
+                    </Box>
                 </Paper>
             </Grid>
-            <Grid xs={12} md={7}>
+            <Grid size={{ xs: 12, md: 7 }}>
                 <Paper sx={{ p: 2, bgcolor: '#212121', color: '#00e676', fontFamily: 'monospace', minHeight: 300, maxHeight: 500, overflow: 'auto' }}>
                     <Typography variant="subtitle2" sx={{ color: '#bdbdbd', mb: 1 }}>Console Output &gt;_</Typography>
-                    {logs.map((line, i) => (
-                        <div key={i}>$ {line}</div>
+                    {logs.map((log) => (
+                        <div key={log.id}>$ {log.text}</div>
                     ))}
                     {logs.length === 0 && <span style={{ opacity: 0.5 }}>Esperando ejecución...</span>}
                 </Paper>
